@@ -1,0 +1,145 @@
+/**
+ * Ponte entre a captura WASAPI local e o relay existente.
+ *
+ * O Firefox não entrega áudio em getDisplayMedia. No Windows, o pequeno helper
+ * nativo captura somente a árvore do processo firefox.exe e escreve PCM estéreo
+ * no stdout. Aqui os blocos são alinhados em 20 ms e comprimidos em Opus antes
+ * de entrar no mesmo protocolo usado pelo áudio capturado no navegador.
+ */
+import { spawn } from 'node:child_process';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import OpusScript from 'opusscript';
+
+const SAMPLE_RATE = 48_000;
+const CHANNELS = 2;
+const FRAME_SAMPLES = 960;
+const PCM_BYTES_PER_FRAME = FRAME_SAMPLES * CHANNELS * 2;
+const FRAME_DURATION_US = 20_000;
+
+const here = path.dirname(fileURLToPath(import.meta.url));
+const defaultHelper = path.join(
+  here,
+  '..',
+  'native',
+  'audio-loopback',
+  'bin',
+  'audio-loopback.exe',
+);
+
+const defaultEncoderFactory = () =>
+  new OpusScript(SAMPLE_RATE, CHANNELS, OpusScript.Application.AUDIO);
+
+export function packNativeAudio(slot, opus, timestamp, sentAt = Date.now()) {
+  const packet = Buffer.allocUnsafe(18 + opus.length);
+  packet.writeUInt8(slot, 0);
+  packet.writeUInt8(3, 1);
+  packet.writeDoubleBE(timestamp, 2);
+  packet.writeDoubleBE(sentAt, 10);
+  Buffer.from(opus).copy(packet, 18);
+  return packet;
+}
+
+export function createNativeAudioBridge({
+  platform = process.platform,
+  helperPath = defaultHelper,
+  spawnProcess = spawn,
+  encoderFactory = defaultEncoderFactory,
+  onConfig,
+  onPacket,
+  onStatus,
+  onError,
+} = {}) {
+  let child = null;
+  let encoder = null;
+  let pcm = Buffer.alloc(0);
+  let timestamp = 0;
+  let configSent = false;
+  let stopping = false;
+
+  function cleanup() {
+    encoder?.delete?.();
+    encoder = null;
+    child = null;
+    pcm = Buffer.alloc(0);
+    timestamp = 0;
+    configSent = false;
+  }
+
+  function encodeAvailable(chunk) {
+    if (!encoder) return;
+    pcm = pcm.length ? Buffer.concat([pcm, chunk]) : Buffer.from(chunk);
+
+    while (pcm.length >= PCM_BYTES_PER_FRAME && encoder) {
+      const frame = pcm.subarray(0, PCM_BYTES_PER_FRAME);
+      pcm = pcm.subarray(PCM_BYTES_PER_FRAME);
+
+      if (!configSent) {
+        configSent = true;
+        onConfig?.({ codec: 'opus', sampleRate: SAMPLE_RATE, numberOfChannels: CHANNELS });
+      }
+
+      const opus = Buffer.from(encoder.encode(frame, FRAME_SAMPLES));
+      onPacket?.(opus, timestamp);
+      timestamp += FRAME_DURATION_US;
+    }
+  }
+
+  function start(application) {
+    if (platform !== 'win32') {
+      throw new Error('O áudio isolado por aplicativo exige Windows 10 ou 11.');
+    }
+    if (application !== 'firefox') {
+      throw new Error('A captura nativa desta versão aceita somente o Firefox.');
+    }
+    if (child) return;
+
+    stopping = false;
+    encoder = encoderFactory();
+    encoder.setBitrate?.(96_000);
+
+    try {
+      child = spawnProcess(helperPath, ['firefox.exe'], {
+        windowsHide: true,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+    } catch (err) {
+      cleanup();
+      throw err;
+    }
+
+    child.stdout.on('data', encodeAvailable);
+
+    let stderr = '';
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk.toString('utf8');
+      const lines = stderr.split(/\r?\n/);
+      stderr = lines.pop() ?? '';
+      for (const line of lines) {
+        if (line.startsWith('READY ')) onStatus?.('ready', line);
+        else if (line.trim()) onStatus?.('diagnostic', line.trim());
+      }
+    });
+
+    child.on('error', (err) => {
+      onError?.(`Não foi possível iniciar a captura do Firefox: ${err.message}`);
+    });
+    child.on('exit', (code) => {
+      const expected = stopping;
+      cleanup();
+      if (!expected && code !== 0) {
+        onError?.(`A captura de áudio do Firefox encerrou com o código ${code}.`);
+      }
+    });
+  }
+
+  function stop() {
+    if (!child) return;
+    stopping = true;
+    const runningChild = child;
+    cleanup();
+    runningChild.kill();
+  }
+
+  return { start, stop, active: () => Boolean(child) };
+}
