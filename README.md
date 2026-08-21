@@ -78,7 +78,7 @@ No Chrome, Edge, Brave e Opera, para áudio de uma única guia:
 2. marque **Compartilhar áudio da guia**;
 3. confirme a captura.
 
-Para mostrar a tela inteira e usar o áudio de outra aba nesses navegadores, inicie o vídeo da tela e use **Configurar fonte do áudio** na página de captura. O vídeo continua vindo da tela; somente a faixa de áudio é trocada.
+Para mostrar a tela inteira com todo o som do computador, marque **Compartilhar áudio do sistema** quando essa opção aparecer. Esse modo também pode incluir o Discord e causar eco. Para evitar isso, inicie o vídeo da tela e use **Escolher áudio separado** na página de captura; o vídeo continua vindo da tela, mas o som vem apenas da aba ou janela escolhida.
 
 No **Firefox para Windows**, não existe áudio em `getDisplayMedia()`. Por isso esta edição liga automaticamente uma captura nativa WASAPI do processo `firefox.exe` e de seus filhos. Ela envia o áudio do Firefox sem misturar Discord, jogos ou outros aplicativos e não exige OBS, cabo virtual nem driver. Se várias janelas do Firefox pertencerem à mesma árvore de processos, o Windows entrega o áudio delas em conjunto; a API do navegador não informa qual PID corresponde à janela escolhida.
 

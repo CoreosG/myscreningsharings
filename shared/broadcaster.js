@@ -127,7 +127,11 @@ export function opcoesTela({ fps = 30, comSom = false, video } = {}) {
   };
   if (comSom) {
     opts.windowAudio = 'window';
-    opts.systemAudio = 'exclude';
+    // Deixa a opção de áudio aparecer também para tela inteira. A escolha
+    // continua explícita no seletor do navegador; quem não marcar a caixa
+    // recebe somente vídeo.
+    opts.systemAudio = 'include';
+    opts.audioSelection = 'include';
   }
   return opts;
 }
@@ -369,9 +373,8 @@ export function createBroadcaster({
    * que era onde `systemAudio` estava, os dois são ignorados em silêncio.
    *
    * O par pedido é sempre o mesmo, porque a superfície só se conhece depois da
-   * escolha: escopar o som à janela e recusar a mistura do sistema. É o mesmo
-   * veto do prepararSom, aplicado antes de o som existir — quem escolhe a tela
-   * inteira volta sem faixa nenhuma, em vez de com uma que precisa ser morta.
+   * escolha: escopar o som à janela e oferecer a mistura do sistema para quem
+   * escolheu conscientemente compartilhar a tela inteira.
    */
   const opcoesCaptura = (over) => opcoesTela({ fps, comSom: audio, ...over });
 
@@ -382,9 +385,8 @@ export function createBroadcaster({
    * erro, e `getSupportedConstraints` não lista `windowAudio` nem `systemAudio`
    * porque nenhum dos dois é constraint. `restrictOwnAudio` é, e é bem mais
    * nova que os dois — onde ela existe, a pilha de captura é atual o bastante
-   * para obedecer ao `systemAudio: 'exclude'` que sempre pedimos. E se a
-   * exclusão foi obedecida, uma faixa que chegou numa janela não pode ser a
-   * mistura do sistema: só sobra o som daquela janela.
+   * para obedecer ao `windowAudio: 'window'`. Nesse caso uma faixa que chegou
+   * numa janela pode ser tratada como áudio daquela janela.
    *
    * Errar para menos custa o comportamento antigo, só aba. Errar para mais
    * devolveria a call em eco — por isso a prova é a feature mais nova das três,
@@ -418,9 +420,24 @@ export function createBroadcaster({
     if (!audio) return null;
 
     const faixa = capturado.getAudioTracks()[0];
-    if (!faixa) return null;
-
     const superficie = videoTrack.getSettings?.().displaySurface;
+    if (!faixa) {
+      if (!usaAudioNativoFirefox()) onAviso?.(avisoSemFaixa(superficie));
+      return null;
+    }
+
+    // Áudio de monitor é uma escolha explícita do usuário no diálogo nativo.
+    // Ele resolve o caso legítimo de quem quer transmitir tudo, mas pode conter
+    // Discord e notificações; por isso entra no ar acompanhado de aviso, em vez
+    // de ser descartado silenciosamente depois da autorização.
+    if (superficie === 'monitor') {
+      somBloqueado = false;
+      onAviso?.(
+        'Áudio da tela inteira ligado. Ele inclui todos os sons do PC, inclusive o Discord; se houver eco, use "Escolher áudio separado".',
+      );
+      return faixa;
+    }
+
     if (somIsolado(superficie)) {
       somBloqueado = false;
       return faixa;
@@ -442,7 +459,7 @@ export function createBroadcaster({
 
   /** Por que o som que veio foi barrado, e por onde sair disso. */
   function avisoSemSom(superficie) {
-    const saida = ' Ou use "Som de uma aba ou janela" para escolher a fonte.';
+    const saida = ' Ou use "Escolher áudio separado" para escolher a fonte.';
 
     // Janela só chega aqui quando o navegador não sabe escopar o som a ela.
     if (superficie === 'window') {
@@ -464,6 +481,20 @@ export function createBroadcaster({
       );
     }
     return 'Não deu para confirmar de onde vinha esse som, então ele foi removido.' + saida;
+  }
+
+  /** Explica por que a captura iniciou muda e como refazer a escolha. */
+  function avisoSemFaixa(superficie) {
+    if (superficie === 'browser') {
+      return 'A aba foi compartilhada sem áudio. Tente novamente e marque "Compartilhar áudio da guia".';
+    }
+    if (superficie === 'window') {
+      return 'A janela veio sem áudio. Se o navegador não oferecer essa opção, use "Escolher áudio separado" e selecione uma aba com som.';
+    }
+    if (superficie === 'monitor') {
+      return 'A tela inteira veio sem áudio. Tente novamente e marque "Compartilhar áudio do sistema"; se a opção não aparecer, use "Escolher áudio separado".';
+    }
+    return 'A captura iniciou sem áudio. Tente novamente e marque a opção de compartilhar áudio.';
   }
 
   /**

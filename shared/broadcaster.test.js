@@ -413,7 +413,8 @@ describe('opcoesTela', () => {
       selfBrowserSurface: 'exclude',
       surfaceSwitching: 'exclude',
       windowAudio: 'window',
-      systemAudio: 'exclude',
+      systemAudio: 'include',
+      audioSelection: 'include',
     });
   });
 });
@@ -854,15 +855,16 @@ describe('som', () => {
     expect(b.temSom()).toBe(true);
   });
 
-  it('mata o som da tela inteira, que traria o Discord de volta em eco', async () => {
+  it('aceita o som da tela inteira quando o usuário o autorizou e avisa sobre eco', async () => {
     const onAviso = vi.fn();
     const stream = comSom('monitor');
 
     const { b } = await noAr({ audio: true, onAviso }, stream);
 
-    expect(b.somBloqueado()).toBe(true);
-    expect(stream.getAudioTracks()).toHaveLength(0);
-    expect(onAviso).toHaveBeenCalledWith(expect.stringMatching(/tela inteira carrega o som/));
+    expect(b.somBloqueado()).toBe(false);
+    expect(b.temSom()).toBe(true);
+    expect(stream.getAudioTracks()).toHaveLength(1);
+    expect(onAviso).toHaveBeenCalledWith(expect.stringMatching(/inclui todos os sons do PC/));
   });
 
   it('mata o som de janela onde o navegador não sabe isolá-lo', async () => {
@@ -875,11 +877,9 @@ describe('som', () => {
     expect(onAviso).toHaveBeenCalledWith(expect.stringMatching(/não isola o som por janela/));
   });
 
-  it('captura sem faixa de som é silêncio, não erro: nada é avisado', async () => {
+  it('avisa quando uma aba foi escolhida sem a caixa de áudio', async () => {
     const onAviso = vi.fn();
 
-    // O som é sempre pedido; quem deixou "Compartilhar o áudio" desmarcada
-    // escolheu transmitir sem ele, e avisar seria acusar a escolha.
     const { b } = await noAr(
       { audio: true, onAviso },
       telaSimples({ width: 1280, height: 720, displaySurface: 'browser' }),
@@ -887,7 +887,7 @@ describe('som', () => {
 
     expect(b.somBloqueado()).toBe(false);
     expect(b.temSom()).toBe(false);
-    expect(onAviso).not.toHaveBeenCalled();
+    expect(onAviso).toHaveBeenCalledWith(expect.stringMatching(/Compartilhar áudio da guia/));
   });
 
   it('mas som que chega de uma superfície não confiável é barrado, e isso se avisa', async () => {
@@ -903,10 +903,10 @@ describe('som', () => {
     expect(onAviso).toHaveBeenCalledWith(expect.stringMatching(/de onde vinha esse som/));
   });
 
-  it('pede a captura escopando o som à janela e recusando o do sistema', async () => {
+  it('oferece áudio de janela e de sistema no seletor', async () => {
     await noAr({ audio: true }, comSom('browser'));
 
-    expect(capturas[0]).toMatchObject({ windowAudio: 'window', systemAudio: 'exclude' });
+    expect(capturas[0]).toMatchObject({ windowAudio: 'window', systemAudio: 'include' });
     expect(capturas[0].audio).toMatchObject({ echoCancellation: false, restrictOwnAudio: true });
   });
 
