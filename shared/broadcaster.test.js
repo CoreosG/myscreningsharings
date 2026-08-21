@@ -205,9 +205,10 @@ class SocketFalso {
   disparar(evento, dado) {
     (this.ouvintes[evento] ?? []).forEach((ouvinte) => ouvinte(dado));
   }
-  abrir() {
+  abrir(slot = 0) {
     this.readyState = SocketFalso.OPEN;
     this.disparar('open');
+    if (slot !== null) this.receber({ type: 'slot', slot });
   }
   receber(objeto) {
     this.disparar('message', { data: JSON.stringify(objeto) });
@@ -470,6 +471,28 @@ describe('câmera', () => {
 });
 
 describe('start', () => {
+  it('espera o slot do servidor antes de iniciar o segundo transmissor', async () => {
+    prepararCaptura(telaSimples());
+    const b = createBroadcaster(opcoes());
+    const promessa = b.start();
+    await respirar();
+    const ws = sockets.at(-1);
+
+    // Uma VPN ou proxy pode atrasar a primeira mensagem mesmo depois de o
+    // WebSocket abrir. O slot 0 não pode ser usado como valor provisório.
+    ws.abrir(null);
+    await respirar();
+    expect(ws.mensagens()).not.toContainEqual({ type: 'start' });
+    expect(encoders).toHaveLength(0);
+
+    ws.receber({ type: 'slot', slot: 1 });
+    await promessa;
+    encoders.at(-1).output(chunkFalso(), {});
+
+    expect(new DataView(ws.binarios()[0]).getUint8(0)).toBe(1);
+    b.stop();
+  });
+
   it('escolhe o primeiro codec aceito e configura o encoder com ele', async () => {
     const { encoder } = await noAr();
 
@@ -723,6 +746,32 @@ describe('quadros', () => {
         }
         await vi.advanceTimersByTimeAsync(1000);
       }
+
+      expect(encoders.at(-1).configuracoes.at(-1).bitrate).toBeLessThan(8_000_000);
+      expect(onAviso).toHaveBeenCalledWith(expect.stringMatching(/rede.*bitrate/i));
+      b.stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('reduz o bitrate quando o relay informa espectadores congestionados', async () => {
+    vi.useFakeTimers();
+    try {
+      const onAviso = vi.fn();
+      const stream = telaSimples();
+      prepararCaptura(stream);
+      const b = createBroadcaster(opcoes({ bitrate: 8_000_000, fps: 60, onAviso }));
+      const promessa = b.start();
+      await vi.advanceTimersByTimeAsync(0);
+      const ws = sockets.at(-1);
+      ws.abrir();
+      await promessa;
+
+      ws.receber({ type: 'relay-congestion', droppedViewers: 1 });
+      await vi.advanceTimersByTimeAsync(1000);
+      ws.receber({ type: 'relay-congestion', droppedViewers: 1 });
+      await vi.advanceTimersByTimeAsync(1000);
 
       expect(encoders.at(-1).configuracoes.at(-1).bitrate).toBeLessThan(8_000_000);
       expect(onAviso).toHaveBeenCalledWith(expect.stringMatching(/rede.*bitrate/i));

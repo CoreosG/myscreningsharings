@@ -132,8 +132,13 @@ O relógio de envio serve só para medir atraso. É exato na mesma máquina; ent
 máquinas diferentes, aproximado.
 
 Controle vai em JSON: `start`, `config`, `audio-config`, `stop`
-(transmissor → servidor); `state`, `stream-start`, `config`, `audio-config`,
-`stream-stop`, `need-keyframe`, `error` (servidor → clientes).
+(transmissor → servidor); `slot`, `state`, `stream-start`, `config`,
+`audio-config`, `relay-congestion`, `stream-stop`, `need-keyframe`, `error`
+(servidor → clientes). O transmissor só começa depois de receber `slot`; isso
+impede que participantes posteriores enviem quadros identificados como se
+fossem do primeiro. `relay-congestion` fecha o ciclo de contrapressão: quando a
+fila de um espectador estoura, o emissor reduz o bitrate em vez de acumular
+atraso indefinidamente.
 
 ## Detalhes que não são acidentais
 

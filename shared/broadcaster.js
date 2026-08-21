@@ -218,7 +218,10 @@ export function createBroadcaster({
   let stageCtx = null;
 
   let running = false;
-  let mySlot = 0;
+  // Null até o servidor atribuir de fato. Usar 0 como provisório fazia o
+  // primeiro transmissor funcionar por coincidência e os demais enviarem
+  // quadros com o slot de outra pessoa em conexões mais lentas.
+  let mySlot = null;
   let wantKeyframe = true;
   let lastKeyframeAt = 0;
   let srcW = 0;
@@ -233,6 +236,7 @@ export function createBroadcaster({
   let networkDrops = 0;
   let outputLimitIndex = 0;
   let networkPressureWindows = 0;
+  let relayCongestion = false;
   let displaySurface = null;
 
   async function start() {
@@ -903,7 +907,10 @@ export function createBroadcaster({
   }
 
   function adaptNetworkQuality() {
-    const congested = capturedFrames >= 10 && networkDrops / capturedFrames >= 0.2;
+    const relayCongested = relayCongestion;
+    relayCongestion = false;
+    const congested =
+      relayCongested || (capturedFrames >= 10 && networkDrops / capturedFrames >= 0.2);
     networkPressureWindows = congested ? networkPressureWindows + 1 : 0;
     if (networkPressureWindows < 2 || bitrate <= 1_200_000) return;
 
@@ -1024,27 +1031,51 @@ export function createBroadcaster({
 
   function connect() {
     return new Promise((resolve, reject) => {
+      mySlot = null;
       ws = new WebSocket(wsUrl);
       ws.binaryType = 'arraybuffer';
+      let abriu = false;
+      let resolvido = false;
+
+      const pronto = () => {
+        if (resolvido || !abriu || !Number.isInteger(mySlot)) return;
+        resolvido = true;
+        clearTimeout(timeout);
+        resolve();
+      };
+
+      const falhar = (message) => {
+        if (resolvido) return;
+        resolvido = true;
+        clearTimeout(timeout);
+        reject(new Error(message));
+      };
 
       const timeout = setTimeout(() => {
+        falhar(
+          abriu
+            ? 'O servidor abriu a conexão, mas não liberou um canal de transmissão (timeout).'
+            : 'Não foi possível falar com o servidor (timeout).',
+        );
         ws.close();
-        reject(new Error('Não foi possível falar com o servidor (timeout).'));
       }, 10_000);
 
       ws.addEventListener('open', () => {
-        clearTimeout(timeout);
-        resolve();
+        abriu = true;
+        pronto();
       });
 
       ws.addEventListener('message', (e) => {
         if (typeof e.data !== 'string') return;
         const msg = JSON.parse(e.data);
 
-        if (msg.type === 'slot') mySlot = msg.slot;
-        else if (msg.type === 'state') viewers = msg.viewers;
+        if (msg.type === 'slot' && Number.isInteger(msg.slot)) {
+          mySlot = msg.slot;
+          pronto();
+        } else if (msg.type === 'state') viewers = msg.viewers;
         // Alguém entrou na sala e precisa de um ponto de partida.
         else if (msg.type === 'need-keyframe') wantKeyframe = true;
+        else if (msg.type === 'relay-congestion') relayCongestion = true;
         else if (msg.type === 'native-audio-ready') {
           nativeAudio = true;
           onAviso?.('Áudio isolado do Firefox ligado.');
@@ -1055,21 +1086,18 @@ export function createBroadcaster({
           stop(msg.motivo ?? 'Transmissão encerrada pela atividade.');
         else if (msg.type === 'error') {
           if (running) stop(msg.message);
-          else {
-            clearTimeout(timeout);
-            reject(new Error(msg.message));
-          }
+          else falhar(msg.message);
         }
       });
 
       ws.addEventListener('error', () => {
-        clearTimeout(timeout);
-        reject(new Error('Falha ao conectar no servidor.'));
+        falhar('Falha ao conectar no servidor.');
       });
 
       ws.addEventListener('close', () => {
         clearTimeout(timeout);
         if (running) stop('Conexão com o servidor caiu.');
+        else falhar('A conexão com o servidor fechou antes de liberar a transmissão.');
       });
     });
   }
@@ -1148,6 +1176,7 @@ export function createBroadcaster({
     };
     outputLimitIndex = 0;
     networkPressureWindows = 0;
+    relayCongestion = false;
     srcW = 0;
     srcH = 0;
     encoder.configure(config);
@@ -1212,6 +1241,7 @@ export function createBroadcaster({
     }
     ws = null;
     nativeAudio = false;
+    relayCongestion = false;
 
     cleanup();
     if (wasRunning) onEnd?.(reason ?? '');

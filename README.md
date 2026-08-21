@@ -132,6 +132,14 @@ Feche outra janela deste projeto. Não finalize um processo desconhecido: descub
 
 No Firefox para Windows, aguarde o status **Áudio isolado do Firefox ligado**; ele é iniciado automaticamente. Nos navegadores Chromium, escolha uma aba ou janela compatível, marque o áudio no seletor e veja o status da página de captura. Se o executável nativo tiver sido removido pelo antivírus, extraia o ZIP oficial novamente e confira `native/audio-loopback/bin/audio-loopback.exe`.
 
+**A transmissão de outra pessoa fica carregando para sempre**
+
+Atualize todos para a versão mais recente. O transmissor agora espera o servidor atribuir seu canal antes de enviar mídia — a falha anterior podia fazer o primeiro participante funcionar e descartar os quadros dos seguintes, sobretudo com VPN ou latência alta. O relay também informa congestionamento ao emissor, que reduz o bitrate automaticamente. Se ainda ocorrer, teste o perfil **Leve**, uma transmissão por vez e, apenas como diagnóstico, sem VPN; o túnel e o WebSocket precisam aceitar tráfego contínuo nos dois sentidos.
+
+**Ao entrar na Activity, deixo de falar ou ouvir no Discord**
+
+A Activity solicita somente a identidade da conta: ela não pede microfone, não muda o dispositivo de áudio e não controla mudo/ensurdecido. Tela e áudio transmitido trafegam pelo relay e podem disputar rede, CPU e GPU com a chamada. Use o perfil **Leve**, feche transmissões que não está assistindo, saia e entre novamente no canal de voz e teste sem VPN ou com o Discord fora do túnel da VPN. Se a voz falhar antes de alguém iniciar uma transmissão, confira o dispositivo de entrada/saída no próprio Discord: nesse caso o relay de tela ainda não está transportando mídia.
+
 **O Cloudflare caiu**
 
 Aguarde a mensagem de nova tentativa. O supervisor reinicia com backoff. Em redes que bloqueiam QUIC/UDP, o próprio `cloudflared` tenta HTTP/2. Túnel rápido recriado gera outro domínio; túnel nomeado mantém o endereço.

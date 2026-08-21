@@ -567,6 +567,39 @@ describe('pushChunk', () => {
       expect(room.droppedChunks).toBe(1);
     });
 
+    it('avisa o transmissor quando o relay descarta quadros de um espectador lento', () => {
+      const { room, entry, lento } = entupido(3 * 1024 * 1024);
+      lento.__primed.add(entry.slot);
+      entry.ws.limpar();
+
+      R.pushChunk(room, entry, quadro(entry.slot, DELTA));
+
+      expect(entry.ws.mensagens()).toContainEqual({
+        type: 'relay-congestion',
+        droppedViewers: 1,
+      });
+    });
+
+    it('limita o aviso de congestionamento a um por segundo', () => {
+      vi.useFakeTimers();
+      try {
+        vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
+        const { room, entry, lento } = entupido(3 * 1024 * 1024);
+        lento.__primed.add(entry.slot);
+        entry.ws.limpar();
+
+        R.pushChunk(room, entry, quadro(entry.slot, DELTA));
+        R.pushChunk(room, entry, quadro(entry.slot, DELTA));
+        expect(entry.ws.mensagens()).toHaveLength(1);
+
+        vi.advanceTimersByTime(1_000);
+        R.pushChunk(room, entry, quadro(entry.slot, DELTA));
+        expect(entry.ws.mensagens()).toHaveLength(2);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('descarta o áudio pelo mesmo teto', () => {
       const { room, entry, lento } = entupido(3 * 1024 * 1024);
 

@@ -609,6 +609,7 @@ export function attachBroadcaster(room, ws, info, fonte = 'tela') {
     startedAt: null,
     traffic: trafficCounter(),
     droppedChunks: 0,
+    lastCongestionNoticeAt: null,
   };
   room.broadcasters.set(chave, entry);
   room.slots.set(slot, entry);
@@ -731,6 +732,18 @@ export function pushChunk(room, entry, chunk) {
   for (const counter of [appTraffic, room.traffic, entry.traffic]) {
     recordTraffic(counter, 'transmittedBytes', sentBytes);
     recordTraffic(counter, 'droppedBytes', droppedBytes);
+  }
+
+  // A fila que estourou é a saída relay -> espectador. O transmissor não
+  // enxerga esse bufferedAmount e, sem retorno, continuaria enviando no mesmo
+  // bitrate enquanto o espectador descarta a transmissão para sempre.
+  const now = Date.now();
+  if (
+    droppedCopies > 0 &&
+    (entry.lastCongestionNoticeAt === null || now - entry.lastCongestionNoticeAt >= 1_000)
+  ) {
+    entry.lastCongestionNoticeAt = now;
+    sendJson(entry.ws, { type: 'relay-congestion', droppedViewers: droppedCopies });
   }
 }
 
