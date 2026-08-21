@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <title>Como não compartilhar tela no Discord</title>
+    <title>Sala de Tela</title>
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
@@ -98,6 +98,10 @@
 
       <!-- Barra de controles. Ocupa espaço no layout: não passa por cima da tela -->
       <div class="bottombar">
+        <p id="mobileCaptureNote" class="mobile-capture-note" role="status" hidden>
+          Neste celular você pode assistir ou transmitir a câmera. Para compartilhar a tela e o
+          áudio de outros aplicativos, use o iniciador em um computador.
+        </p>
         <div id="panel" class="panel" hidden>
           <div class="panel-row"><span>Transmitindo</span><strong id="pWho">—</strong></div>
           <div class="panel-row"><span>Latência</span><strong id="pLag">—</strong></div>

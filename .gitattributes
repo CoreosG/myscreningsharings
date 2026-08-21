@@ -12,3 +12,7 @@
 
 # Binários, para o git nunca tentar converter nada dentro deles.
 *.png binary
+
+# Launchers Unix precisam conservar LF e permissão de execução no checkout.
+*.sh text eol=lf
+*.command text eol=lf

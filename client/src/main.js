@@ -1,6 +1,7 @@
 import { DiscordSDK } from '@discord/embedded-app-sdk';
 import { createPlayer } from './player.js';
 import { createAudio } from './audio.js';
+import { canCaptureScreen, defaultBroadcastQuality, isMobileClient } from './platform.js';
 import { createBroadcaster } from '../../shared/broadcaster.js';
 
 const $ = (id) => document.getElementById(id);
@@ -9,6 +10,11 @@ const params = new URLSearchParams(location.search);
 // O Discord injeta frame_id/instance_id na URL do iframe. Sem eles, estamos
 // rodando direto no navegador — modo de desenvolvimento.
 const inDiscord = params.has('frame_id');
+// Feature detection decide a captura. O user-agent serve somente para adaptar
+// a explicação e o perfil inicial ao contexto móvel, sem bloquear tablets ou
+// navegadores que venham a implementar getDisplayMedia no futuro.
+const clienteMovel = isMobileClient();
+const capturaTelaDisponivel = () => canCaptureScreen();
 
 // Dentro da Activity todo tráfego precisa passar pelo proxy do Discord.
 const P = inDiscord ? '/.proxy' : '';
@@ -853,7 +859,20 @@ function renderBar() {
   btn.classList.toggle('live', telaNoAr);
   btn.disabled = false;
 
-  const rotuloShare = telaNoAr ? 'Parar tela' : 'Compartilhar tela';
+  const telaLimitadaNoMovel = clienteMovel && !capturaTelaDisponivel() && !telaNoAr;
+  btn.classList.toggle('unavailable', telaLimitadaNoMovel);
+  $('mobileCaptureNote').hidden = !telaLimitadaNoMovel;
+  if (telaLimitadaNoMovel) {
+    btn.setAttribute('aria-describedby', 'mobileCaptureNote');
+  } else {
+    btn.removeAttribute('aria-describedby');
+  }
+
+  const rotuloShare = telaNoAr
+    ? 'Parar tela'
+    : telaLimitadaNoMovel
+      ? 'Compartilhar tela indisponível neste celular'
+      : 'Compartilhar tela';
   btn.dataset.tip = rotuloShare;
   btn.setAttribute('aria-label', rotuloShare);
 
@@ -1750,7 +1769,9 @@ function abaAberta() {
  * ficam aqui, e não num modal que aparece antes de cada início, porque decidir
  * qualidade toda vez que se quer mostrar a tela é atrito no caminho curto.
  */
-const AJUSTES_PADRAO = { bitrate: 2500000, fps: 30 };
+// Câmeras móveis esquentam e perdem quadros mais cedo. A primeira transmissão
+// começa no perfil Leve; uma escolha explícita do usuário continua preservada.
+const AJUSTES_PADRAO = defaultBroadcastQuality(clienteMovel);
 const PERFIS_QUALIDADE = {
   leve: { bitrate: 1_500_000, fps: 30 },
   equilibrado: AJUSTES_PADRAO,
@@ -2007,6 +2028,14 @@ $('share').addEventListener('click', () => {
   if (minhasFontes().has('tela') || myBroadcast) {
     stopMyBroadcast('tela');
     renderBar();
+    return;
+  }
+
+  if (clienteMovel && !capturaTelaDisponivel()) {
+    toast(
+      'A captura de tela não está disponível neste celular. Você ainda pode assistir ou transmitir a câmera; para tela e áudio de aplicativos, use um computador.',
+      true,
+    );
     return;
   }
 

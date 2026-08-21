@@ -111,4 +111,88 @@ describe('captura nativa de áudio', () => {
     expect(() => bridge.start('discord')).toThrow(/Firefox/);
     expect(d.spawnProcess).not.toHaveBeenCalled();
   });
+
+  it('não abre dois helpers e parar sem captura é inofensivo', () => {
+    const d = dependencies();
+    const bridge = createNativeAudioBridge({
+      ...d.options,
+      spawnProcess: d.spawnProcess,
+      encoderFactory: d.encoderFactory,
+    });
+
+    bridge.stop();
+    bridge.start('firefox');
+    bridge.start('firefox');
+    expect(d.spawnProcess).toHaveBeenCalledOnce();
+  });
+
+  it('classifica status e diagnóstico emitidos pelo helper', () => {
+    const d = dependencies();
+    const onStatus = vi.fn();
+    const bridge = createNativeAudioBridge({
+      ...d.options,
+      spawnProcess: d.spawnProcess,
+      encoderFactory: d.encoderFactory,
+      onStatus,
+    });
+
+    bridge.start('firefox');
+    d.child.stderr.write('READY 42');
+    d.child.stderr.write(' 48000 2 s16le\naviso útil\n\n');
+
+    expect(onStatus).toHaveBeenNthCalledWith(1, 'ready', 'READY 42 48000 2 s16le');
+    expect(onStatus).toHaveBeenNthCalledWith(2, 'diagnostic', 'aviso útil');
+  });
+
+  it('propaga falha ao criar o processo e volta ao estado inativo', () => {
+    const d = dependencies();
+    const failure = new Error('helper ausente');
+    const bridge = createNativeAudioBridge({
+      ...d.options,
+      spawnProcess: vi.fn(() => {
+        throw failure;
+      }),
+      encoderFactory: d.encoderFactory,
+    });
+
+    expect(() => bridge.start('firefox')).toThrow(failure);
+    expect(d.encoder.delete).toHaveBeenCalledOnce();
+    expect(bridge.active()).toBe(false);
+  });
+
+  it('diferencia erro de spawn, saída inesperada e encerramento normal', () => {
+    const d = dependencies();
+    const onError = vi.fn();
+    const bridge = createNativeAudioBridge({
+      ...d.options,
+      spawnProcess: d.spawnProcess,
+      encoderFactory: d.encoderFactory,
+      onError,
+    });
+
+    bridge.start('firefox');
+    d.child.emit('error', new Error('acesso negado'));
+    d.child.emit('exit', 7);
+
+    expect(onError).toHaveBeenNthCalledWith(
+      1,
+      'Não foi possível iniciar a captura do Firefox: acesso negado',
+    );
+    expect(onError).toHaveBeenNthCalledWith(
+      2,
+      'A captura de áudio do Firefox encerrou com o código 7.',
+    );
+
+    const normal = dependencies();
+    const normalError = vi.fn();
+    const normalBridge = createNativeAudioBridge({
+      ...normal.options,
+      spawnProcess: normal.spawnProcess,
+      encoderFactory: normal.encoderFactory,
+      onError: normalError,
+    });
+    normalBridge.start('firefox');
+    normal.child.emit('exit', 0);
+    expect(normalError).not.toHaveBeenCalled();
+  });
 });

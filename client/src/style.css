@@ -695,6 +695,19 @@ button {
   padding: 0 16px 16px;
 }
 
+.mobile-capture-note {
+  max-width: min(520px, calc(100vw - 24px));
+  margin: 0;
+  padding: 9px 12px;
+  border: 1px solid #a47718;
+  border-radius: 8px;
+  background: #2f2818;
+  color: #f2d58a;
+  font-size: 12.5px;
+  line-height: 1.4;
+  text-align: center;
+}
+
 /* Com tela no palco as barras saem do layout e flutuam sobre o vídeo: cada
    faixa reservada é uma tira de imagem a menos, e a imagem é o que se veio ver.
    Vale fora da tela cheia também — a faixa desperdiçada é a mesma nos dois
@@ -869,6 +882,11 @@ button {
   background: transparent;
   color: var(--muted);
   cursor: default;
+}
+
+.btn.unavailable {
+  border: 1px dashed #a47718;
+  color: #f2d58a;
 }
 
 .btn.on {

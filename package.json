@@ -26,6 +26,7 @@
     "smoke:admin": "node scripts/admin-smoke.mjs",
     "diagnostico:windows": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/windows-bootstrap.ps1 -Diagnostico",
     "diagnostico:linux": "sh scripts/linux-bootstrap.sh --diagnostico",
+    "diagnostico:macos": "sh scripts/macos-bootstrap.sh --diagnostico",
     "test": "vitest run",
     "test:watch": "vitest",
     "coverage": "vitest run --coverage",

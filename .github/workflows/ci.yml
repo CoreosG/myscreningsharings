@@ -11,14 +11,13 @@ concurrency:
 
 jobs:
   check:
-    # Windows está na matriz porque é onde este projeto é escrito, e porque o
-    # que quebra só num sistema — caminho com barra invertida, CRLF, o spawn do
-    # servidor pelos scripts — quebra lá.
+    # Os três sistemas distribuídos ficam na matriz. Caminhos, permissões,
+    # binários nativos e o bootstrap portátil diferem entre eles.
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest, windows-latest, macos-latest]
 
     steps:
       - uses: actions/checkout@v7

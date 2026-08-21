@@ -37,4 +37,10 @@ describe('bootstrap portatil do Windows', () => {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+
+  it('oferece o mesmo atalho de tunel nomeado dos launchers Unix', () => {
+    const script = fs.readFileSync(path.join(import.meta.dirname, 'windows-bootstrap.ps1'), 'utf8');
+    expect(script).toContain('[switch]$TunelCriar');
+    expect(script).toContain("& $NpmCmd run 'tunel:criar'");
+  });
 });

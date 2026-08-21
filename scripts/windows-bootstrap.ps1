@@ -1,7 +1,8 @@
 [CmdletBinding()]
 param(
   [switch]$Diagnostico,
-  [switch]$Preparar
+  [switch]$Preparar,
+  [switch]$TunelCriar
 )
 
 $ErrorActionPreference = 'Stop'
@@ -171,6 +172,12 @@ try {
 
   Get-PortableNode
   Install-Dependencies
+  if ($TunelCriar) {
+    $env:PATH = "$NodeRoot;$env:PATH"
+    $env:npm_config_cache = Join-Path $ProjectRoot '.cache\npm'
+    & $NpmCmd run 'tunel:criar'
+    exit $LASTEXITCODE
+  }
   if ($Preparar) {
     Write-Host ''
     Write-Host '  Runtime e dependencias prontos.' -ForegroundColor Green
