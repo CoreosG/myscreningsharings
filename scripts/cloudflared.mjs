@@ -102,7 +102,13 @@ export async function garantirCloudflared() {
   const t = alvo();
   const local = t && path.join(PASTA, t.binario);
 
-  if (local && fs.existsSync(local)) return local;
+  if (local && fs.existsSync(local)) {
+    const cached = spawnSync(local, ['--version'], { encoding: 'utf8' });
+    if (!cached.error && cached.status === 0) return local;
+    // Um ZIP interrompido, ou um cache criado por outro sistema no mesmo
+    // diretório (dual boot/WSL), não pode condenar todas as próximas partidas.
+    fs.rmSync(local, { force: true });
+  }
 
   const jaInstalado = doPath();
   if (jaInstalado) return jaInstalado;

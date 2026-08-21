@@ -185,7 +185,8 @@ const repararDependencias = () => {
   if (!npmCli) {
     return {
       status: 1,
-      stderr: 'O npm portátil não foi encontrado junto do Node.js. Execute INICIAR.bat novamente.',
+      stderr:
+        'O npm portátil não foi encontrado junto do Node.js. Execute INICIAR.bat (Windows) ou INICIAR.sh (Linux) novamente.',
     };
   }
   return spawnSync(process.execPath, [npmCli, 'ci', '--no-audit', '--no-fund'], {
@@ -209,7 +210,7 @@ if (!build.ok) {
   linha(`${cor.fraco}  Detalhes técnicos:${cor.fim}\n`);
   linha(detalhes);
   linha(
-    `\n${cor.amarelo}  Feche esta janela e abra INICIAR.bat novamente. Se repetir, envie os detalhes acima.${cor.fim}\n`,
+    `\n${cor.amarelo}  Feche esta janela e abra o iniciador novamente. Se repetir, envie os detalhes acima.${cor.fim}\n`,
   );
   process.exit(1);
 }

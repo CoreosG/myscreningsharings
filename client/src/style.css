@@ -8,6 +8,12 @@
   --accent: #5865f2;
   --danger: #f23f43;
   --live: #23a55a;
+  /* O Discord injeta os quatro primeiros valores no mobile. Fora dele, os
+     env() do navegador cobrem recorte, ilha dinâmica e barra de gesto. */
+  --safe-top: var(--discord-safe-area-inset-top, env(safe-area-inset-top, 0px));
+  --safe-right: var(--discord-safe-area-inset-right, env(safe-area-inset-right, 0px));
+  --safe-bottom: var(--discord-safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
+  --safe-left: var(--discord-safe-area-inset-left, env(safe-area-inset-left, 0px));
 }
 
 * {
@@ -42,6 +48,7 @@ body {
   height: 100%;
   display: flex;
   flex-direction: column;
+  padding: var(--safe-top) var(--safe-right) var(--safe-bottom) var(--safe-left);
 }
 
 /* -------------------------------------------------------------------- grade */
@@ -1440,7 +1447,7 @@ button {
 .toast {
   position: fixed;
   left: 50%;
-  bottom: 88px;
+  bottom: calc(88px + var(--safe-bottom));
   transform: translateX(-50%);
   max-width: min(440px, calc(100vw - 32px));
   padding: 11px 16px;

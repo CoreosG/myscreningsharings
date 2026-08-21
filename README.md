@@ -1,8 +1,8 @@
-# Sala de Tela — edição fácil para Windows
+# Sala de Tela — compartilhamento fácil no Discord
 
-Compartilhe tela e áudio por uma Activity do Discord sem pedir que cada pessoa instale Node.js, npm ou Cloudflare. No Windows 10/11, o fluxo normal é baixar o ZIP, extrair e abrir `INICIAR.bat`.
+Compartilhe tela e áudio por uma Activity do Discord sem pedir que cada pessoa instale Node.js, npm ou Cloudflare. No Windows use `INICIAR.bat`; no Ubuntu, Debian, Kali e outras distribuições Linux use `INICIAR.sh`.
 
-Este é um projeto independente de **DevilNine**, criado como evolução e inspirado no [Sala de Tela original, de Jc007zZ](https://github.com/Jc007zZ/discord-screen). Esta versão possui identidade, manutenção e distribuição próprias, com bootstrap portátil para Windows, supervisão do túnel, áudio isolado, compatibilidade ampliada, perfis de qualidade e documentação voltada a quem só quer usar.
+Este é um projeto independente de **DevilNine**, criado como evolução e inspirado no [Sala de Tela original, de Jc007zZ](https://github.com/Jc007zZ/discord-screen). Esta versão possui identidade, manutenção e distribuição próprias, com bootstrap portátil para Windows e Linux, supervisão do túnel, áudio isolado, compatibilidade ampliada, perfis de qualidade e documentação voltada a quem só quer usar.
 
 ## Início rápido no Windows 10/11
 
@@ -23,13 +23,23 @@ Nas próximas vezes, o iniciador reutiliza tudo. Ele não exige administrador, n
 
 > O Windows pode mostrar o aviso do SmartScreen porque um `.bat` baixado não possui assinatura comercial. Confira se o ZIP veio deste repositório. Não desative o SmartScreen globalmente.
 
+## Início rápido no Linux
+
+1. Baixe e extraia o ZIP em uma pasta do seu usuário.
+2. Abra um terminal nessa pasta.
+3. Execute `sh INICIAR.sh`.
+4. Se faltarem somente ferramentas básicas (`curl`, `tar`, `xz` ou SHA-256), o script identifica a distribuição e pede `sudo` para instalá-las.
+5. Cole o Client ID e o Client Secret no assistente e mantenha o terminal aberto.
+
+Node.js 22, npm, dependências e `cloudflared` ficam locais no projeto, como no Windows. O launcher reconhece `apt` (Ubuntu, Debian, Kali, Mint), `dnf`/`yum` (Fedora, RHEL e derivados), `pacman` (Arch/Manjaro) e `zypper` (openSUSE). Ele não altera `PATH` permanente nem instala Node globalmente. Consulte [instalação e diagnóstico no Linux](docs/linux.md).
+
 ## Configuração única no Discord
 
 O Discord não oferece uma API pública para criar uma aplicação em seu nome ou editar todos os campos do Developer Portal. Por segurança, estes passos continuam manuais uma vez:
 
 1. Abra o [Discord Developer Portal](https://discord.com/developers/applications) e escolha **New Application**.
 2. Em **OAuth2**, copie o **Client ID** e gere/copie o **Client Secret**. Cole apenas na janela local do assistente.
-3. Em **Activities → Settings**, habilite Activities e marque a plataforma Desktop.
+3. Em **Activities → Settings**, habilite Activities e marque Desktop. Para assistir pelo celular, marque também Android e iOS.
 4. Em **Activities → URL Mappings**, crie o prefixo `/` e cole no Target somente o domínio mostrado pelo iniciador, sem `https://`.
 5. Em **OAuth2 → Redirects**, cole o endereço completo mostrado pelo iniciador, terminado em `/auth/callback`.
 6. Instale a aplicação pelo link que o próprio iniciador imprime e abra um canal de voz. A Activity aparece no botão de foguete/Apps.
@@ -48,23 +58,27 @@ Se nenhum túnel fixo estiver configurado, o programa cria um endereço `tryclou
 
 Execute uma vez, em um terminal aberto na pasta:
 
-```powershell
+```text
+Windows:
 .\.runtime\node\npm.cmd run tunel:criar
+
+Linux:
+sh INICIAR.sh --tunel-criar
 ```
 
 Ou, se já tiver Node.js 22+ instalado:
 
-```powershell
+```text
 npm run tunel:criar
 ```
 
-O assistente abre o login oficial da Cloudflare, cria um Named Tunnel, configura o DNS do domínio escolhido e grava o caminho da configuração no `.env`. A partir daí `INICIAR.bat` respeita esse túnel e o endereço permanece estável. O `cloudflared` já reconecta conexões transitórias internamente; se o processo encerrar, o aplicativo o inicia novamente com espera progressiva de 2 a 30 segundos.
+O assistente abre o login oficial da Cloudflare, cria um Named Tunnel, configura o DNS do domínio escolhido e grava o caminho da configuração no `.env`. A partir daí `INICIAR.bat` e `INICIAR.sh` respeitam esse túnel e o endereço permanece estável. O `cloudflared` já reconecta conexões transitórias internamente; se o processo encerrar, o aplicativo o inicia novamente com espera progressiva de 2 a 30 segundos.
 
 Quick Tunnels são destinados a testes e têm limites próprios. Para publicar de forma estável, use Named Tunnel ou hospedagem. Veja a [documentação oficial da Cloudflare](https://developers.cloudflare.com/tunnel/setup/).
 
 ## Terminal limpo ou detalhado
 
-Por padrão, `INICIAR.bat` limpa as mensagens de instalação depois de subir e deixa visíveis somente os endereços local/público, o Redirect do Discord e avisos que exigem ação. Isso facilita copiar exatamente o que precisa ser colado no portal.
+Por padrão, os dois iniciadores limpam as mensagens de instalação depois de subir e deixam visíveis somente os endereços local/público, o Redirect do Discord e avisos que exigem ação. Isso facilita copiar exatamente o que precisa ser colado no portal.
 
 Para desenvolvimento, abra `.env` e troque `TERMINAL_LIMPO=1` por `TERMINAL_LIMPO=0`. A próxima inicialização mostrará os logs detalhados de servidor, salas, codec, áudio e Cloudflare. Erros críticos continuam aparecendo nos dois modos.
 
@@ -95,12 +109,13 @@ A resolução máxima é 1080p. A captura já pede ao navegador o redimensioname
 
 ### Compatibilidade real dos navegadores
 
-| Navegador desktop             |       Assistir |                     Compartilhar vídeo |                                       Áudio de guia |
-| ----------------------------- | -------------: | -------------------------------------: | --------------------------------------------------: |
-| Chrome / Edge / Brave / Opera |            Sim |            Sim, caminho mais eficiente |                   Sim, quando a fonte oferece áudio |
-| Firefox recente no Windows    |            Sim |              Sim, modo compatibilidade |         Sim, captura nativa isolada por processo |
-| Safari                        | Pode funcionar | Depende de WebCodecs/captura da versão |                                            Limitado |
-| Navegador móvel               |       Limitado |                                    Não |                                                 Não |
+| Navegador desktop             |                                      Assistir |                            Compartilhar vídeo |                                                            Áudio de guia |
+| ----------------------------- | --------------------------------------------: | --------------------------------------------: | -----------------------------------------------------------------------: |
+| Chrome / Edge / Brave / Opera |                                           Sim |                   Sim, caminho mais eficiente |                                        Sim, quando a fonte oferece áudio |
+| Firefox recente no Windows    |                                           Sim |                     Sim, modo compatibilidade |                                 Sim, captura nativa isolada por processo |
+| Firefox recente no Linux      |                                           Sim |                     Sim, modo compatibilidade | Não; o Firefox não fornece áudio de tela e WASAPI é exclusivo do Windows |
+| Safari                        |                                Pode funcionar |        Depende de WebCodecs/captura da versão |                                                                 Limitado |
+| Navegador móvel               | Sim para assistir; câmera depende do aparelho | Captura da tela não disponível pelo fluxo web |                                                 Não para captura de tela |
 
 Firefox era bloqueado artificialmente pelo projeto, embora já existisse um caminho de vídeo via elemento `<video>`. Esta edição libera esse caminho, usa um relógio em Web Worker para a captura não congelar quando a aba fica em segundo plano e contorna a ausência de áudio do Firefox com o capturador nativo do Windows. Consulte o [`getDisplayMedia()` no MDN](https://developer.mozilla.org/en-US/docs/Web/API/MediaDevices/getDisplayMedia).
 
@@ -110,11 +125,12 @@ Para navegar entre abas no Firefox, escolha **Janela** e selecione a janela inte
 
 Execute sem iniciar serviços:
 
-```bat
-INICIAR.bat -Diagnostico
+```text
+Windows: INICIAR.bat -Diagnostico
+Linux:   sh INICIAR.sh --diagnostico
 ```
 
-O diagnóstico mostra Windows/arquitetura, PowerShell, pasta, runtime local e presença do `.env`, sem revelar segredos.
+O diagnóstico mostra sistema, arquitetura, pasta, runtime local e presença do `.env`, sem revelar segredos nem instalar nada.
 
 **A Activity abre em branco**
 
@@ -126,7 +142,7 @@ Baixe o ZIP mais recente. O iniciador atual detecta essa falha, reinstala automa
 
 **A porta 3001 está ocupada**
 
-Feche outra janela deste projeto. Não finalize um processo desconhecido: descubra o dono com `Get-NetTCPConnection -LocalPort 3001` antes.
+Feche outra janela deste projeto. Não finalize um processo desconhecido: no Windows descubra o dono com `Get-NetTCPConnection -LocalPort 3001`; no Linux use `ss -ltnp 'sport = :3001'`.
 
 **Não sai áudio**
 
@@ -150,9 +166,9 @@ Mova para Documentos/Downloads e extraia novamente. O programa precisa gravar o 
 
 **Quero reinstalar somente o runtime local**
 
-Feche o programa e apague `.runtime`, `.bootstrap` e `node_modules`. No próximo `INICIAR.bat` tudo será baixado novamente. Seus dados ficam no `.env`; não o apague se quiser preservar a configuração.
+Feche o programa e apague `.runtime`, `.bootstrap` e `node_modules`. No próximo iniciador tudo será baixado novamente. Seus dados ficam no `.env`; não o apague se quiser preservar a configuração.
 
-Veja o guia detalhado de [instalação e diagnóstico no Windows](docs/windows.md).
+Veja os guias detalhados de [Windows](docs/windows.md), [Linux](docs/linux.md) e o [plano para Android/iOS](docs/mobile.md).
 
 ## Privacidade e segurança
 
@@ -180,17 +196,18 @@ Comandos principais:
 | Comando                  | Função                                               |
 | ------------------------ | ---------------------------------------------------- |
 | `INICIAR.bat`            | instala/reutiliza runtime portátil e inicia tudo     |
+| `sh INICIAR.sh`          | equivalente Linux, também a partir do ZIP            |
 | `npm run start:fast`     | configura, compila, abre túnel e servidor            |
 | `npm run configurar`     | altera a configuração local                          |
 | `npm run tunel:criar`    | cria Named Tunnel com domínio estável                |
 | `npm run dev`            | cliente, servidor e túnel em modo de desenvolvimento |
 | `npm test`               | testes automatizados                                 |
 | `npm run smoke`          | smoke do relay em servidor já iniciado               |
-| `npm run smoke:audio`    | smoke real do capturador WASAPI e do relay            |
+| `npm run smoke:audio`    | smoke real do capturador WASAPI e do relay           |
 | `npm run smoke:controle` | smoke do canal da aba de captura                     |
 | `npm run smoke:admin`    | sobe e valida painel/API localmente                  |
 
-Para VPS/Docker, consulte [docs/vps.md](docs/vps.md). A arquitetura, protocolo e decisões de desempenho estão em [docs/como-funciona.md](docs/como-funciona.md).
+Para VPS/Docker, consulte [docs/vps.md](docs/vps.md). A arquitetura, protocolo e decisões de desempenho estão em [docs/como-funciona.md](docs/como-funciona.md). O que já funciona no celular e o caminho para transmissão nativa estão em [docs/mobile.md](docs/mobile.md).
 
 ## Limites que o programa não pode remover
 

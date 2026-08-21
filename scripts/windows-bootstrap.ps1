@@ -144,11 +144,14 @@ function Get-PortableNode {
 
 function Install-Dependencies {
   $currentHash = Get-Sha256 $LockFile
+  # node_modules contém binários por plataforma (por exemplo, esbuild). Só o
+  # hash do lock não basta quando a mesma pasta passa por Windows e WSL/Linux.
+  $fingerprint = "$currentHash|win32|$(Get-WindowsArchitecture)"
   $savedHash = if (Test-Path -LiteralPath $DependencyMarker) {
     (Get-Content -LiteralPath $DependencyMarker -Raw).Trim()
   } else { '' }
   $vite = Join-Path $ProjectRoot 'node_modules\vite\bin\vite.js'
-  if ($currentHash -eq $savedHash -and (Test-Path -LiteralPath $vite)) {
+  if ($fingerprint -eq $savedHash -and (Test-Path -LiteralPath $vite)) {
     Write-Step 'Dependencias ja estao prontas.'
     return
   }
@@ -159,7 +162,7 @@ function Install-Dependencies {
   $env:npm_config_cache = Join-Path $ProjectRoot '.cache\npm'
   & $NpmCmd ci --no-audit --no-fund
   if ($LASTEXITCODE -ne 0) { Stop-Friendly "npm ci encerrou com codigo $LASTEXITCODE." }
-  [IO.File]::WriteAllText($DependencyMarker, $currentHash, [Text.UTF8Encoding]::new($false))
+  [IO.File]::WriteAllText($DependencyMarker, $fingerprint, [Text.UTF8Encoding]::new($false))
 }
 
 try {
