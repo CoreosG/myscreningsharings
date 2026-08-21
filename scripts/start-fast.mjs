@@ -19,6 +19,7 @@ import { createInterface } from 'node:readline/promises';
 import { stdin, stdout } from 'node:process';
 
 import { lerEnv, gravarEnv, terminalLimpo, cor } from './env.mjs';
+import { executarBuildComReparo } from './build-recovery.mjs';
 import { garantirEntryPoint, contarEntryPoint } from './entry-point.mjs';
 import { atrasoReinicio } from './reinicio.mjs';
 import { abrirTunel } from './tunel.mjs';
@@ -27,11 +28,6 @@ import { RAIZ, VITE, acompanhar, derrubar, encerrarFilho, encerrandoAgora } from
 const linha = (t = '') => console.log(t);
 const nota = (t) => linha(`${cor.fraco}${t}${cor.fim}`);
 const erro = (t) => linha(`${cor.vermelho}  ${t}${cor.fim}`);
-
-if (!fs.existsSync(VITE)) {
-  linha(`\n${cor.vermelho}  Faltam as dependências. Rode: npm install${cor.fim}\n`);
-  process.exit(1);
-}
 
 // ---------------------------------------------------------------- configurar
 
@@ -172,17 +168,53 @@ contarEntryPoint(
 linha();
 nota('  Montando o site…');
 
-const build = spawnSync(process.execPath, [VITE, 'build'], {
-  cwd: path.join(RAIZ, 'client'),
-  stdio: 'ignore',
-});
+const executarBuild = () =>
+  spawnSync(process.execPath, [VITE, 'build'], {
+    cwd: path.join(RAIZ, 'client'),
+    encoding: 'utf8',
+    windowsHide: true,
+  });
 
-if (build.status !== 0) {
+const npmCli = [
+  process.env.npm_execpath,
+  path.join(path.dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js'),
+].find((candidato) => candidato && fs.existsSync(candidato));
+
+const repararDependencias = () => {
+  nota('  O primeiro build falhou. Reparando as dependências automaticamente…');
+  if (!npmCli) {
+    return {
+      status: 1,
+      stderr: 'O npm portátil não foi encontrado junto do Node.js. Execute INICIAR.bat novamente.',
+    };
+  }
+  return spawnSync(process.execPath, [npmCli, 'ci', '--no-audit', '--no-fund'], {
+    cwd: RAIZ,
+    encoding: 'utf8',
+    windowsHide: true,
+    env: {
+      ...process.env,
+      npm_config_cache: path.join(RAIZ, '.cache', 'npm'),
+    },
+  });
+};
+
+const build = executarBuildComReparo({ build: executarBuild, reparar: repararDependencias });
+
+if (!build.ok) {
+  const detalhes = build.detalhes.slice(-6000) || 'O processo terminou sem informar a causa.';
   linha(
-    `\n${cor.vermelho}  O site não compilou. Rode "npm run build" para ver o erro.${cor.fim}\n`,
+    `\n${cor.vermelho}  Não foi possível montar o site nem após o reparo automático.${cor.fim}`,
+  );
+  linha(`${cor.fraco}  Detalhes técnicos:${cor.fim}\n`);
+  linha(detalhes);
+  linha(
+    `\n${cor.amarelo}  Feche esta janela e abra INICIAR.bat novamente. Se repetir, envie os detalhes acima.${cor.fim}\n`,
   );
   process.exit(1);
 }
+
+if (build.reparado) nota('  Dependências reparadas e site montado com sucesso.');
 
 // ------------------------------------------------------------- túnel e servidor
 

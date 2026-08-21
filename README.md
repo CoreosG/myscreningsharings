@@ -120,6 +120,10 @@ O diagnóstico mostra Windows/arquitetura, PowerShell, pasta, runtime local e pr
 
 Confirme o Target atual em Activities → URL Mappings. No modo rápido ele muda quando o túnel é recriado. Feche e abra a Activity para descartar bundle antigo do cliente Discord.
 
+**Apareceu “O site não compilou”**
+
+Baixe o ZIP mais recente. O iniciador atual detecta essa falha, reinstala automaticamente as dependências travadas no `package-lock.json` e tenta compilar uma segunda vez. Se o reparo também falhar, a janela mostra o erro real; envie essas linhas ao relatar o problema. Não é necessário instalar Node.js nem executar `npm run build` manualmente.
+
 **A porta 3001 está ocupada**
 
 Feche outra janela deste projeto. Não finalize um processo desconhecido: descubra o dono com `Get-NetTCPConnection -LocalPort 3001` antes.
