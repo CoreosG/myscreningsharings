@@ -24,6 +24,7 @@ import { fileURLToPath } from 'node:url';
 
 import { lerEnv, gravarEnv, cor } from './env.mjs';
 import { garantirCloudflared, PASTA } from './cloudflared.mjs';
+import { ajudaRedirecionamento } from './portal-discord.mjs';
 
 const ENDERECO = /https:\/\/[a-z0-9-]+\.trycloudflare\.com/;
 
@@ -209,6 +210,10 @@ function anunciar(url, escreveu, clientId) {
   console.log(`\n      ${cor.verde}${dominio}${cor.fim}\n`);
   console.log('  E em OAuth2 → Redirects:');
   console.log(`\n      ${cor.verde}${url}/auth/callback${cor.fim}\n`);
+  const ajudaPortal = ajudaRedirecionamento(`${url}/auth/callback`);
+  console.log(`${cor.fraco}  ${ajudaPortal.botao}${cor.fim}`);
+  console.log(`${cor.fraco}  ${ajudaPortal.falha}${cor.fim}`);
+  console.log(`${cor.fraco}  ${ajudaPortal.seguranca}${cor.fim}\n`);
   console.log(`${cor.fraco}  (esse endereço muda toda vez que este comando reinicia)${cor.fim}\n`);
 
   // O link de instalação fica por último porque é o único que não muda — e é

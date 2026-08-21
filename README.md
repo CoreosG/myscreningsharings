@@ -43,6 +43,8 @@ O Discord não permite que um programa crie a aplicação e autorize campos sens
 5. Em **OAuth2 → Redirects**, cole o endereço exibido que termina em `/auth/callback`.
 6. Use o link de instalação mostrado no terminal e abra a Activity em um canal de voz.
 
+O botão azul **Redirecionamento/Add Redirect** deve criar uma caixa na mesma página. Se ele abrir uma tela cheia de código com `removeChild`, siga o [contorno seguro para o erro do Developer Portal](docs/discord-portal.md); não é necessário refazer URL Mapping nem executar comandos no console.
+
 O Client Secret fica somente no servidor local e o `.gitignore` exclui `.env`. Nunca publique `.env`, tokens ou credenciais da pasta `.cloudflared`.
 
 ## Compartilhamento e compatibilidade
@@ -85,6 +87,7 @@ O supervisor reinicia `cloudflared` com espera progressiva. Named Tunnel mantém
 - **Outra pessoa fica carregando:** atualize todos, teste o perfil Leve e diagnostique sem VPN. O relay reduz bitrate ao detectar congestionamento.
 - **Porta 3001 ocupada:** feche outra instância deste projeto; não finalize processos desconhecidos.
 - **macOS bloqueou o `.command`:** clique com o botão direito → **Abrir**. Se o ZIP perdeu a permissão, siga o [guia macOS](docs/macos.md).
+- **Portal cai ao clicar em Redirecionamento:** recarregue sem tradução/extensões ou use janela anônima/outro navegador; veja o [guia do erro `removeChild`](docs/discord-portal.md).
 - **Cloudflare caiu:** aguarde a reconexão. Quick Tunnel recriado exige atualizar os dois endereços no portal.
 
 Arquivos em `Program Files`, raiz do disco ou pasta protegida podem impedir gravação. Extraia em Downloads/Documentos. Para reinstalar apenas o ambiente local, preserve `.env`, feche o programa e remova `.runtime`, `.bootstrap` e `node_modules`.

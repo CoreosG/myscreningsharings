@@ -16,6 +16,7 @@ import crypto from 'node:crypto';
 
 import { lerEnv, gravarEnv, cor } from './env.mjs';
 import { garantirEntryPoint, contarEntryPoint } from './entry-point.mjs';
+import { ajudaRedirecionamento } from './portal-discord.mjs';
 
 const linha = (texto = '') => console.log(texto);
 const titulo = (texto) => linha(`\n${cor.forte}${texto}${cor.fim}`);
@@ -196,6 +197,10 @@ linha();
 linha(`        ${cor.verde}${origem}/auth/callback${cor.fim}`);
 linha();
 nota('     Não esqueça o "Save Changes" no rodapé da página.');
+const ajudaPortal = ajudaRedirecionamento(`${origem}/auth/callback`);
+nota(`     ${ajudaPortal.botao}`);
+nota(`     ${ajudaPortal.falha}`);
+nota(`     ${ajudaPortal.seguranca}`);
 
 linha(`\n  ${cor.forte}3.${cor.fim} Abra este link para instalar a aplicação no seu servidor:`);
 linha();

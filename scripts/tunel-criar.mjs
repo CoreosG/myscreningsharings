@@ -24,6 +24,7 @@ import { stdin, stdout } from 'node:process';
 
 import { lerEnv, gravarEnv, cor } from './env.mjs';
 import { garantirCloudflared } from './cloudflared.mjs';
+import { ajudaRedirecionamento } from './portal-discord.mjs';
 
 const CASA = path.join(os.homedir(), '.cloudflared');
 const CERT = path.join(CASA, 'cert.pem');
@@ -248,5 +249,9 @@ nota('  No portal do Discord, em Activities → URL Mappings, o "Target" é:');
 linha(`\n      ${cor.verde}${hostname}${cor.fim}\n`);
 nota('  E em OAuth2 → Redirects:');
 linha(`\n      ${cor.verde}https://${hostname}/auth/callback${cor.fim}\n`);
+const ajudaPortal = ajudaRedirecionamento(`https://${hostname}/auth/callback`);
+nota(`  ${ajudaPortal.botao}`);
+nota(`  ${ajudaPortal.falha}`);
+nota(`  ${ajudaPortal.seguranca}`);
 nota('  Como o endereço é fixo, isso é uma vez só.');
 linha();
