@@ -12,6 +12,7 @@ import * as R from './rooms.js';
 import { systemSnapshot, startSampling } from './system.js';
 import { buildAdminDashboard } from './admin.js';
 import { createNativeAudioBridge, packNativeAudio } from './native-audio.js';
+import { createNativeAudioAuthorizer, startNativeAudioLocalServer } from './native-audio-auth.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.join(__dirname, '..', '.env') });
@@ -66,6 +67,22 @@ if (ADMIN_ID && process.env.SESSION_SECRET.length < 32) {
 if (ADMIN_ID && !/^[0-9]{15,21}$/.test(ADMIN_ID)) {
   console.error('ERRO: DISCORD_ADMIN_ID invalido. Use o ID numerico da sua conta Discord.');
   process.exit(1);
+}
+
+const nativeAudioAuthorizer = createNativeAudioAuthorizer({ verifyToken });
+let nativeAudioLocalServer = null;
+let nativeAudioLocalUrl = null;
+if (process.platform === 'win32') {
+  try {
+    const publicOrigin = new URL(PUBLIC_ORIGIN).origin;
+    nativeAudioLocalServer = await startNativeAudioLocalServer({
+      authorizer: nativeAudioAuthorizer,
+      allowedOrigins: [publicOrigin, `http://localhost:${PORT}`, `http://127.0.0.1:${PORT}`],
+    });
+    nativeAudioLocalUrl = `http://127.0.0.1:${nativeAudioLocalServer.address().port}`;
+  } catch (err) {
+    console.warn(`[audio local] companion indisponível: ${err.message}`);
+  }
 }
 
 // Sem painel, ninguém lê as métricas — então nem começa a medir.
@@ -823,7 +840,7 @@ app.get('/api/config', (_req, res) => {
 
   // || e nao ??: uma variavel vazia no .env chega como string vazia, e o
   // contrato aqui e "null significa nao configurado".
-  res.json({ clientId: DISCORD_CLIENT_ID || null, asset });
+  res.json({ clientId: DISCORD_CLIENT_ID || null, asset, nativeAudioLocalUrl });
 });
 
 // Activity buildada (produção). Em dev o Vite serve o client na 5173.
@@ -947,8 +964,22 @@ function handleBroadcaster(ws, room, info, fonte) {
     entry.nativeAudio = null;
   };
 
-  const startNativeAudio = () => {
+  const startNativeAudio = (proof) => {
     if (fonte !== 'tela') return;
+    if (
+      !nativeAudioAuthorizer.verify(proof, {
+        room: room.id,
+        uid: info.id,
+        role: 'broadcaster',
+      })
+    ) {
+      R.sendJson(ws, {
+        type: 'native-audio-error',
+        message:
+          'O áudio isolado do Firefox só funciona no mesmo computador que está executando o INICIAR. Em outro computador, use Chrome, Edge, Brave ou Opera e marque o áudio no seletor.',
+      });
+      return;
+    }
     if (entry.nativeAudio?.active()) {
       R.sendJson(ws, { type: 'native-audio-ready', application: 'firefox' });
       return;
@@ -1015,7 +1046,7 @@ function handleBroadcaster(ws, room, info, fonte) {
       R.setAudioConfig(room, entry, msg.config);
       logDev(`[room ${room.id}] audio de ${info.name}: ${msg.config.codec}`);
     } else if (msg.type === 'native-audio-start') {
-      startNativeAudio();
+      startNativeAudio(msg.proof);
     } else if (msg.type === 'native-audio-stop') {
       stopNativeAudio();
     } else if (msg.type === 'stop') {
@@ -1153,6 +1184,8 @@ server.on('error', (err) => {
   console.error('');
   process.exit(1);
 });
+
+server.on('close', () => nativeAudioLocalServer?.close());
 
 /** Data da modificação mais recente dentro de um caminho. */
 function maisRecente(alvo) {

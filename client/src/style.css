@@ -662,6 +662,10 @@ body {
   font-size: 19px;
 }
 
+.empty-retry {
+  margin-top: 14px;
+}
+
 .muted {
   color: var(--muted);
   font-size: 14px;

@@ -184,6 +184,7 @@ export function fonteIndisponivel(fonte) {
  * @param {(stats:object)=>void} [opts.onStats]  viewers, fps, mbps, segundos no ar
  * @param {(reason:string)=>void} [opts.onEnd]   encerrou (por qualquer motivo)
  * @param {(msg:string)=>void} [opts.onAviso]    algo mudou sem ser erro
+ * @param {()=>Promise<string>} [opts.nativeAudioProof] prova do companion local
  */
 export function createBroadcaster({
   wsUrl,
@@ -200,6 +201,7 @@ export function createBroadcaster({
   onStats,
   onEnd,
   onAviso,
+  nativeAudioProof,
 }) {
   let ws = null;
   let stream = null;
@@ -208,6 +210,7 @@ export function createBroadcaster({
   let audioEncoder = null;
   let audioReader = null;
   let nativeAudio = false;
+  let nativeAudioRequesting = false;
   // Pediram som, mas a superfície escolhida traria o Discord junto. Guardado
   // para a interface poder oferecer a saída em vez de só avisar e esquecer.
   let somBloqueado = false;
@@ -652,11 +655,25 @@ export function createBroadcaster({
     return /Firefox\//i.test(navigator.userAgent) && !window.MediaStreamTrackProcessor;
   }
 
-  function requestNativeAudio() {
-    if (!running || ws?.readyState !== WebSocket.OPEN) return;
+  async function requestNativeAudio() {
+    if (!running || ws?.readyState !== WebSocket.OPEN || nativeAudioRequesting) return;
     nativeAudio = false;
-    ws.send(JSON.stringify({ type: 'native-audio-start', application: 'firefox' }));
+    nativeAudioRequesting = true;
     onAviso?.('Ligando o áudio isolado do Firefox…');
+    try {
+      if (!nativeAudioProof) {
+        throw new Error(
+          'O áudio isolado do Firefox exige a página externa no computador que está executando o INICIAR.',
+        );
+      }
+      const proof = await nativeAudioProof();
+      if (!running || ws?.readyState !== WebSocket.OPEN) return;
+      ws.send(JSON.stringify({ type: 'native-audio-start', application: 'firefox', proof }));
+    } catch (err) {
+      onAviso?.(err.message || 'Não foi possível alcançar o capturador de áudio local.');
+    } finally {
+      nativeAudioRequesting = false;
+    }
   }
 
   async function pickConfig(width, height) {
@@ -1241,6 +1258,7 @@ export function createBroadcaster({
     }
     ws = null;
     nativeAudio = false;
+    nativeAudioRequesting = false;
     relayCongestion = false;
 
     cleanup();

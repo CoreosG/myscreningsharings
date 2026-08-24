@@ -444,11 +444,18 @@ describe('watch e unwatch', () => {
     expect(ws.tipos()).toContain('need-keyframe');
   });
 
-  it('ignora o pedido repetido, para um cliente em laço não inundar a sala', () => {
+  it('repete config e keyframe quando o primeiro quadro se perdeu', () => {
     const { room, viewer, entry } = comTransmissao();
+    R.setConfig(room, entry, { codec: 'avc1' });
+    viewer.limpar();
+    viewer.__primed.add(entry.slot);
+    viewer.__lastKeyframeRequest.set(entry.slot, Date.now() - 2_000);
+    entry.ws.limpar();
     R.watch(room, viewer, entry.slot);
 
-    expect(viewer.enviados).toHaveLength(0);
+    expect(viewer.tipos()).toContain('config');
+    expect(entry.ws.tipos()).toContain('need-keyframe');
+    expect(viewer.__primed.has(entry.slot)).toBe(false);
   });
 
   it('para de enviar quando o espectador desiste', () => {

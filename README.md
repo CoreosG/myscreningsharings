@@ -8,7 +8,7 @@ Projeto independente de [DevilNine](https://github.com/DevilNine), criado como e
 
 - **ZIP pronto para uso:** baixa e verifica Node.js 22, dependências e `cloudflared` dentro do projeto; não exige Node/npm global.
 - **Três sistemas:** `INICIAR.bat` no Windows 10/11, `INICIAR.sh` nas principais distribuições Linux e `INICIAR.command` no macOS Intel/Apple Silicon.
-- **Tela e áudio:** guia com áudio em Chromium; Firefox no Windows usa captura WASAPI isolada do processo; câmera fica separada da voz do Discord.
+- **Tela e áudio:** guia com áudio em Chromium; Firefox e derivados no PC Windows anfitrião usam WASAPI isolado; câmera fica separada da voz do Discord.
 - **Qualidade adaptativa:** perfis de 30/60 fps até 1080p, hardware encoding quando disponível e redução automática sob CPU/rede congestionada.
 - **Vários transmissores:** cada participante recebe canal próprio; espectadores escolhem o que assistir sem baixar todas as telas.
 - **Cloudflare supervisionado:** reconexão automática, terminal limpo e opção de Named Tunnel para endereço fixo.
@@ -54,7 +54,8 @@ Clique em **Compartilhar tela**. Quando o iframe do Discord não puder capturar,
 | Plataforma | Assistir | Tela/câmera | Áudio de tela |
 | --- | ---: | ---: | --- |
 | Chrome, Edge, Brave, Opera desktop | Sim | Sim | guia/janela/sistema quando o navegador oferecer |
-| Firefox no Windows | Sim | Sim | Firefox isolado por processo via WASAPI |
+| Firefox, LibreWolf, Waterfox, Floorp e Zen no Windows anfitrião | Sim | Sim | navegador isolado por processo via WASAPI |
+| Firefox em outro PC participante | Sim | Sim | sem companion local; use um Chromium para transmitir áudio |
 | Firefox no Linux/macOS | Sim | Sim, modo compatível | limitado pelo navegador/sistema |
 | Safari recente | Sim | depende de WebCodecs e captura da versão | limitado |
 | Android/iOS | Sim | câmera quando suportada; tela web indisponível na maioria | não para tela |
@@ -83,8 +84,8 @@ O supervisor reinicia `cloudflared` com espera progressiva. Named Tunnel mantém
 
 - **Activity em branco:** confira o Target atual e reabra a Activity para descartar o bundle antigo.
 - **“O site não compilou”:** o launcher reinstala o lockfile e tenta novamente; se falhar, envie o erro real mostrado na janela.
-- **Áudio ausente:** no Chromium marque áudio no seletor; no Firefox/Windows aguarde “Áudio isolado do Firefox ligado”.
-- **Outra pessoa fica carregando:** atualize todos, teste o perfil Leve e diagnostique sem VPN. O relay reduz bitrate ao detectar congestionamento.
+- **Áudio ausente:** no Chromium marque áudio no seletor; no Firefox/derivado do PC anfitrião mantenha o navegador aberto e aguarde “Áudio isolado do Firefox ligado”. O código 3 agora identifica automaticamente os derivados conhecidos e explica quando nenhum está aberto.
+- **Outra pessoa fica carregando:** o cliente repede automaticamente a configuração e pede outro keyframe quando o primeiro se perde. Se persistir, teste o perfil Leve e diagnostique sem VPN.
 - **Porta 3001 ocupada:** feche outra instância deste projeto; não finalize processos desconhecidos.
 - **macOS bloqueou o `.command`:** clique com o botão direito → **Abrir**. Se o ZIP perdeu a permissão, siga o [guia macOS](docs/macos.md).
 - **Portal cai ao clicar em Redirecionamento:** recarregue sem tradução/extensões ou use janela anônima/outro navegador; veja o [guia do erro `removeChild`](docs/discord-portal.md).
@@ -95,6 +96,7 @@ Arquivos em `Program Files`, raiz do disco ou pasta protegida podem impedir grav
 ## Privacidade, limites e documentação
 
 - O projeto não grava mídia em disco; o relay WebSocket repassa pacotes codificados somente aos espectadores autorizados da sala.
+- O helper WASAPI exige uma prova em uma porta exclusiva de `127.0.0.1`; um participante remoto não pode acionar nem receber por engano o áudio do navegador do anfitrião.
 - O servidor/túnel precisa ficar ligado no PC, Mac, Linux ou VPS que hospeda a Activity.
 - Quick Tunnel não é hospedagem de produção, e o relay atual não substitui uma SFU para grandes públicos.
 - Navegadores exigem gesto e nova escolha em cada captura. Áudio isolado varia por navegador e sistema.

@@ -1,7 +1,9 @@
 # Captura de áudio por processo
 
-`audio-loopback.exe` captura somente o áudio produzido por `firefox.exe` e seus
-processos filhos usando WASAPI Process Loopback. Ele escreve PCM `s16le`, 48 kHz,
+`audio-loopback.exe` captura somente o áudio produzido pelo Firefox ou por um
+derivado conhecido (LibreWolf, Waterfox, Floorp, Zen, Pale Moon e Mullvad
+Browser) e seus processos filhos usando WASAPI Process Loopback. Se mais de um
+estiver aberto, a janela mais à frente tem prioridade. Ele escreve PCM `s16le`, 48 kHz,
 estéreo no stdout e não abre rede, arquivos ou microfone.
 
 O executável versionado em `bin/` é x64 e não exige instalação. Para recompilar:

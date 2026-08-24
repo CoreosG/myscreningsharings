@@ -69,6 +69,18 @@ const shareToken = new URL(room.shareUrl).searchParams.get('t');
 const viewer = await open(`${WS_BASE}/ws?t=${encodeURIComponent(room.viewerToken)}`);
 const broadcaster = await open(`${WS_BASE}/ws?t=${encodeURIComponent(shareToken)}&fonte=tela`);
 
+async function localProof() {
+  const config = await fetch(`${BASE}/api/config`).then((response) => response.json());
+  if (!config.nativeAudioLocalUrl) throw new Error('companion de áudio local indisponível');
+  const response = await fetch(`${config.nativeAudioLocalUrl}/proof`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Origin: new URL(BASE).origin },
+    body: JSON.stringify({ token: shareToken }),
+  });
+  if (!response.ok) throw new Error(`companion recusou a prova: HTTP ${response.status}`);
+  return (await response.json()).proof;
+}
+
 try {
   const slotMessage = await waitFor(broadcaster, jsonType('slot'), 'slot');
   const slot = JSON.parse(slotMessage.data.toString()).slot;
@@ -76,7 +88,7 @@ try {
   await waitFor(viewer, jsonType('stream-start'), 'início da transmissão');
   viewer.send(JSON.stringify({ type: 'watch', slot }));
 
-  broadcaster.send(JSON.stringify({ type: 'native-audio-start' }));
+  broadcaster.send(JSON.stringify({ type: 'native-audio-start', proof: await localProof() }));
   await waitFor(broadcaster, jsonType('native-audio-ready'), 'WASAPI ficar pronto');
   const config = await waitFor(viewer, jsonType('audio-config'), 'config Opus');
   const packet = await waitFor(

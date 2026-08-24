@@ -1,6 +1,7 @@
 import { DiscordSDK } from '@discord/embedded-app-sdk';
 import { createPlayer } from './player.js';
 import { createAudio } from './audio.js';
+import { withTimeout } from './async.js';
 import { canCaptureScreen, defaultBroadcastQuality, isMobileClient } from './platform.js';
 import { createBroadcaster } from '../../shared/broadcaster.js';
 
@@ -106,10 +107,13 @@ function toast(msg, isError = false) {
   toastTimer = setTimeout(() => (el.hidden = true), 6000);
 }
 
-function setEmpty(title, text) {
+function setEmpty(title, text, retry = false) {
   $('emptyTitle').textContent = title;
   $('emptyText').textContent = text;
+  $('emptyRetry').hidden = !retry;
 }
+
+$('emptyRetry').addEventListener('click', () => location.reload());
 
 /** Cor estável por usuário — mesma pessoa, mesma cor, em qualquer sessão. */
 function colorFor(id) {
@@ -908,10 +912,13 @@ function openStream(slot, userId) {
     // Vira true no primeiro quadro desenhado. Até lá o tile mostra "Conectando…"
     // em vez de uma caixa preta que não se distingue de um travamento.
     started: false,
+    firstFrameTimer: null,
     player: createPlayer(canvas, {
       onError: (m) => toast(m, true),
       onTamanho: () => {
         s.started = true;
+        clearTimeout(s.firstFrameTimer);
+        s.firstFrameTimer = null;
         renderGrid();
       },
     }),
@@ -920,6 +927,14 @@ function openStream(slot, userId) {
   };
 
   streams.set(slot, s);
+  // O proxy da Activity pode perder o primeiro keyframe durante uma troca de
+  // rede. Repetir o pedido reinicia apenas o decoder daquele espectador e
+  // recupera sozinho, sem obrigar a fechar a transmissão.
+  s.firstFrameTimer = setTimeout(() => {
+    if (streams.get(slot) === s && !s.started && ws?.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'watch', slot }));
+    }
+  }, 3_000);
 }
 
 /** Liga o som desta transmissão. Chamado quando a config de áudio chega. */
@@ -948,6 +963,7 @@ function closeStream(slot) {
   const s = streams.get(slot);
   if (!s) return;
   s.player.stop();
+  clearTimeout(s.firstFrameTimer);
   s.audio?.stop();
   s.canvas.remove();
   streams.delete(slot);
@@ -1000,7 +1016,7 @@ function ensureStatsTimer() {
 
 boot().catch((err) => {
   console.error(err);
-  setEmpty('Não foi possível entrar', err.message);
+  setEmpty('Não foi possível entrar', err.message, true);
 });
 
 async function boot() {
@@ -1008,7 +1024,13 @@ async function boot() {
   // termine fica com a cara de "Conectando…" para sempre, sem dizer o que
   // está faltando — que foi exatamente como este arranque ja travou.
   const vigia = setTimeout(() => {
-    setEmpty('Está demorando…', 'Sem resposta do servidor. Ele está no ar?');
+    setEmpty(
+      'Está demorando…',
+      inDiscord
+        ? 'O Discord ainda não liberou a Activity. Aguarde ou recarregue.'
+        : 'Sem resposta do servidor. Ele está no ar?',
+      true,
+    );
   }, 8000);
 
   // Buscada em paralelo, nunca antes: ela traz o diagnóstico de versão e o
@@ -1508,19 +1530,31 @@ async function authDiscord(fonteDoId) {
 
   const clientId = id;
   sdk = new DiscordSDK(clientId);
-  await sdk.ready();
+  await withTimeout(
+    sdk.ready(),
+    15_000,
+    'O Discord não concluiu a abertura da Activity. Recarregue e tente novamente.',
+  );
 
-  const { code } = await sdk.commands.authorize({
-    client_id: clientId,
-    response_type: 'code',
-    state: '',
-    prompt: 'none',
-    // Só precisamos de /users/@me. Menos escopo, menos atrito no consentimento.
-    scope: ['identify'],
-  });
+  const { code } = await withTimeout(
+    sdk.commands.authorize({
+      client_id: clientId,
+      response_type: 'code',
+      state: '',
+      prompt: 'none',
+      // Só precisamos de /users/@me. Menos escopo, menos atrito no consentimento.
+      scope: ['identify'],
+    }),
+    15_000,
+    'O Discord não respondeu à autorização da Activity. Recarregue e tente novamente.',
+  );
 
   const { access_token } = await post(`${P}/api/token`, { code, client_id: clientId });
-  await sdk.commands.authenticate({ access_token });
+  await withTimeout(
+    sdk.commands.authenticate({ access_token }),
+    15_000,
+    'O Discord não concluiu a autenticação da Activity. Recarregue e tente novamente.',
+  );
 
   // guild/channel vão junto para o servidor poder confirmar, pelo Discord, que
   // a pessoa está mesmo naquela call.

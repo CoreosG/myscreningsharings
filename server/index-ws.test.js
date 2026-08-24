@@ -231,6 +231,16 @@ describe('transmissor', () => {
     expect(await ate(espectador, doTipo('config'), 'a config seguinte')).toBeTruthy();
   });
 
+  it('não deixa um participante remoto acionar o áudio do computador anfitrião', async () => {
+    const { transmissor } = await noAr();
+
+    transmissor.send(JSON.stringify({ type: 'native-audio-start' }));
+
+    expect(await ate(transmissor, doTipo('native-audio-error'), 'a recusa local')).toMatchObject({
+      message: expect.stringMatching(/mesmo computador.*INICIAR/i),
+    });
+  });
+
   it('a saída libera o slot e atualiza a sala', async () => {
     const { room, transmissor, espectador } = await noAr();
 

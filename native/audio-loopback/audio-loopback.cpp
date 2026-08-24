@@ -39,21 +39,24 @@ std::wstring lower(std::wstring value) {
 struct ProcessInfo {
   DWORD pid;
   DWORD parent;
+  std::wstring executable;
 };
 
-DWORD findRootProcess(const std::wstring& executable) {
+DWORD findRootProcess(const std::vector<std::wstring>& executables, std::wstring& selected) {
   const HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
   if (snapshot == INVALID_HANDLE_VALUE) return 0;
 
   PROCESSENTRY32W entry{};
   entry.dwSize = sizeof(entry);
   std::vector<ProcessInfo> matches;
-  const auto wanted = lower(executable);
+  std::unordered_set<std::wstring> wanted;
+  for (const auto& executable : executables) wanted.insert(lower(executable));
 
   if (Process32FirstW(snapshot, &entry)) {
     do {
-      if (lower(entry.szExeFile) == wanted) {
-        matches.push_back({entry.th32ProcessID, entry.th32ParentProcessID});
+      const auto executable = lower(entry.szExeFile);
+      if (wanted.contains(executable)) {
+        matches.push_back({entry.th32ProcessID, entry.th32ParentProcessID, executable});
       }
     } while (Process32NextW(snapshot, &entry));
   }
@@ -62,15 +65,16 @@ DWORD findRootProcess(const std::wstring& executable) {
   std::unordered_set<DWORD> ids;
   for (const auto& process : matches) ids.insert(process.pid);
 
-  std::vector<DWORD> roots;
+  std::vector<ProcessInfo> roots;
   for (const auto& process : matches) {
-    if (!ids.contains(process.parent)) roots.push_back(process.pid);
+    if (!ids.contains(process.parent)) roots.push_back(process);
   }
   if (roots.empty()) return 0;
 
   struct WindowSearch {
-    const std::vector<DWORD>* roots;
+    const std::vector<ProcessInfo>* roots;
     DWORD result = 0;
+    std::wstring executable;
   } search{&roots};
 
   EnumWindows(
@@ -79,15 +83,24 @@ DWORD findRootProcess(const std::wstring& executable) {
         if (!IsWindowVisible(window) || GetWindow(window, GW_OWNER)) return TRUE;
         DWORD pid = 0;
         GetWindowThreadProcessId(window, &pid);
-        if (std::find(search->roots->begin(), search->roots->end(), pid) == search->roots->end()) {
+        const auto match = std::find_if(
+            search->roots->begin(), search->roots->end(),
+            [pid](const ProcessInfo& process) { return process.pid == pid; });
+        if (match == search->roots->end()) {
           return TRUE;
         }
         search->result = pid;
+        search->executable = match->executable;
         return FALSE;
       },
       reinterpret_cast<LPARAM>(&search));
 
-  return search.result ? search.result : roots.front();
+  if (search.result) {
+    selected = search.executable;
+    return search.result;
+  }
+  selected = roots.front().executable;
+  return roots.front().pid;
 }
 
 class ActivationHandler final : public IActivateAudioInterfaceCompletionHandler, public IAgileObject {
@@ -162,14 +175,17 @@ bool writeAll(HANDLE output, const BYTE* data, DWORD bytes) {
 }  // namespace
 
 int wmain(int argc, wchar_t** argv) {
-  if (argc != 2) {
-    fwprintf(stderr, L"ERROR uso: audio-loopback.exe firefox.exe\n");
+  if (argc < 2) {
+    fwprintf(stderr, L"ERROR uso: audio-loopback.exe firefox.exe [derivado.exe ...]\n");
     return 2;
   }
 
-  const DWORD pid = findRootProcess(argv[1]);
+  std::vector<std::wstring> executables;
+  for (int i = 1; i < argc; ++i) executables.emplace_back(argv[i]);
+  std::wstring selected;
+  const DWORD pid = findRootProcess(executables, selected);
   if (!pid) {
-    fwprintf(stderr, L"ERROR processo nao encontrado: %ls\n", argv[1]);
+    fwprintf(stderr, L"ERROR processo compativel nao encontrado\n");
     return 3;
   }
 
@@ -253,7 +269,7 @@ int wmain(int argc, wchar_t** argv) {
     return 11;
   }
 
-  fwprintf(stderr, L"READY %lu 48000 2 s16le\n", static_cast<unsigned long>(pid));
+  fwprintf(stderr, L"READY %lu %ls 48000 2 s16le\n", static_cast<unsigned long>(pid), selected.c_str());
   fflush(stderr);
 
   const HANDLE output = GetStdHandle(STD_OUTPUT_HANDLE);

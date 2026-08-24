@@ -316,6 +316,7 @@ const opcoes = (extra = {}) => ({
   wsUrl: 'wss://exemplo.test/ws?t=abc',
   bitrate: 2_500_000,
   fps: 30,
+  nativeAudioProof: async () => 'prova-local',
   ...extra,
 });
 
@@ -1351,6 +1352,7 @@ describe('sem MediaStreamTrackProcessor', () => {
     expect(ws.mensagens()).toContainEqual({
       type: 'native-audio-start',
       application: 'firefox',
+      proof: 'prova-local',
     });
 
     ws.receber({ type: 'native-audio-ready', application: 'firefox' });
@@ -1371,6 +1373,20 @@ describe('sem MediaStreamTrackProcessor', () => {
     expect(result).toEqual({ native: true });
     expect(capturas).toHaveLength(1);
     expect(ws.mensagens().filter((m) => m.type === 'native-audio-start')).toHaveLength(2);
+    b.stop();
+  });
+
+  it('não aciona o helper do anfitrião quando falta a prova local', async () => {
+    montarNavegador({
+      sem: ['MediaStreamTrackProcessor'],
+      userAgent: 'Mozilla/5.0 Firefox/154.0',
+    });
+    const onAviso = vi.fn();
+    const { b, ws } = await noAr({ audio: true, nativeAudioProof: null, onAviso });
+    await respirar();
+
+    expect(ws.mensagens().some((m) => m.type === 'native-audio-start')).toBe(false);
+    expect(onAviso).toHaveBeenCalledWith(expect.stringMatching(/computador.*INICIAR/i));
     b.stop();
   });
 });

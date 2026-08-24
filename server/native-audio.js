@@ -16,6 +16,15 @@ const CHANNELS = 2;
 const FRAME_SAMPLES = 960;
 const PCM_BYTES_PER_FRAME = FRAME_SAMPLES * CHANNELS * 2;
 const FRAME_DURATION_US = 20_000;
+const FIREFOX_FAMILY_EXECUTABLES = [
+  'firefox.exe',
+  'librewolf.exe',
+  'waterfox.exe',
+  'floorp.exe',
+  'zen.exe',
+  'palemoon.exe',
+  'mullvadbrowser.exe',
+];
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const defaultHelper = path.join(
@@ -99,7 +108,7 @@ export function createNativeAudioBridge({
     encoder.setBitrate?.(96_000);
 
     try {
-      child = spawnProcess(helperPath, ['firefox.exe'], {
+      child = spawnProcess(helperPath, FIREFOX_FAMILY_EXECUTABLES, {
         windowsHide: true,
         stdio: ['ignore', 'pipe', 'pipe'],
       });
@@ -111,24 +120,42 @@ export function createNativeAudioBridge({
     child.stdout.on('data', encodeAvailable);
 
     let stderr = '';
+    const diagnostics = [];
+    let reported = false;
+    const report = (message) => {
+      if (reported || stopping) return;
+      reported = true;
+      onError?.(message);
+    };
     child.stderr.on('data', (chunk) => {
       stderr += chunk.toString('utf8');
       const lines = stderr.split(/\r?\n/);
       stderr = lines.pop() ?? '';
       for (const line of lines) {
         if (line.startsWith('READY ')) onStatus?.('ready', line);
-        else if (line.trim()) onStatus?.('diagnostic', line.trim());
+        else if (line.trim()) {
+          diagnostics.push(line.trim());
+          onStatus?.('diagnostic', line.trim());
+        }
       }
     });
 
     child.on('error', (err) => {
-      onError?.(`Não foi possível iniciar a captura do Firefox: ${err.message}`);
+      report(`Não foi possível iniciar a captura de áudio do navegador: ${err.message}`);
     });
     child.on('exit', (code) => {
       const expected = stopping;
+      if (stderr.trim()) diagnostics.push(stderr.trim());
       cleanup();
       if (!expected && code !== 0) {
-        onError?.(`A captura de áudio do Firefox encerrou com o código ${code}.`);
+        const message =
+          code === 3
+            ? 'Nenhum navegador compatível foi encontrado em execução. Abra e mantenha aberto o Firefox, LibreWolf, Waterfox, Floorp ou Zen e tente novamente.'
+            : code >= 4 && code <= 11
+              ? 'O Windows não conseguiu abrir a captura de áudio do aplicativo. Atualize o Windows 10/11 e o driver de áudio e tente novamente.'
+              : `A captura de áudio do navegador encerrou inesperadamente (código ${code}).`;
+        const detalhe = diagnostics.at(-1);
+        report(detalhe && code !== 3 ? `${message} Detalhe: ${detalhe}` : message);
       }
     });
   }

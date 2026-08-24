@@ -38,7 +38,7 @@ describe('captura nativa de áudio', () => {
     expect([...packet.subarray(18)]).toEqual([7, 8, 9]);
   });
 
-  it('captura somente a árvore do Firefox e produz Opus em quadros de 20 ms', () => {
+  it('tenta Firefox e derivados conhecidos sem aceitar processo vindo da rede', () => {
     const d = dependencies();
     const onConfig = vi.fn();
     const onPacket = vi.fn();
@@ -53,7 +53,15 @@ describe('captura nativa de áudio', () => {
     bridge.start('firefox');
     expect(d.spawnProcess).toHaveBeenCalledWith(
       'audio-loopback.exe',
-      ['firefox.exe'],
+      [
+        'firefox.exe',
+        'librewolf.exe',
+        'waterfox.exe',
+        'floorp.exe',
+        'zen.exe',
+        'palemoon.exe',
+        'mullvadbrowser.exe',
+      ],
       expect.objectContaining({ windowsHide: true }),
     );
 
@@ -160,7 +168,7 @@ describe('captura nativa de áudio', () => {
     expect(bridge.active()).toBe(false);
   });
 
-  it('diferencia erro de spawn, saída inesperada e encerramento normal', () => {
+  it('não duplica o erro de spawn quando o processo também encerra', () => {
     const d = dependencies();
     const onError = vi.fn();
     const bridge = createNativeAudioBridge({
@@ -176,11 +184,22 @@ describe('captura nativa de áudio', () => {
 
     expect(onError).toHaveBeenNthCalledWith(
       1,
-      'Não foi possível iniciar a captura do Firefox: acesso negado',
+      'Não foi possível iniciar a captura de áudio do navegador: acesso negado',
     );
-    expect(onError).toHaveBeenNthCalledWith(
-      2,
-      'A captura de áudio do Firefox encerrou com o código 7.',
+    expect(onError).toHaveBeenCalledOnce();
+
+    const inesperado = dependencies();
+    const unexpectedError = vi.fn();
+    const unexpectedBridge = createNativeAudioBridge({
+      ...inesperado.options,
+      spawnProcess: inesperado.spawnProcess,
+      encoderFactory: inesperado.encoderFactory,
+      onError: unexpectedError,
+    });
+    unexpectedBridge.start('firefox');
+    inesperado.child.emit('exit', 7);
+    expect(unexpectedError).toHaveBeenCalledWith(
+      'O Windows não conseguiu abrir a captura de áudio do aplicativo. Atualize o Windows 10/11 e o driver de áudio e tente novamente.',
     );
 
     const normal = dependencies();
@@ -194,5 +213,24 @@ describe('captura nativa de áudio', () => {
     normalBridge.start('firefox');
     normal.child.emit('exit', 0);
     expect(normalError).not.toHaveBeenCalled();
+  });
+
+  it('traduz o código 3 em uma orientação útil para derivados do Firefox', () => {
+    const d = dependencies();
+    const onError = vi.fn();
+    const bridge = createNativeAudioBridge({
+      ...d.options,
+      spawnProcess: d.spawnProcess,
+      encoderFactory: d.encoderFactory,
+      onError,
+    });
+
+    bridge.start('firefox');
+    d.child.stderr.write('ERROR processo compativel nao encontrado\n');
+    d.child.emit('exit', 3);
+
+    expect(onError).toHaveBeenCalledOnce();
+    expect(onError.mock.calls[0][0]).toMatch(/Firefox, LibreWolf, Waterfox, Floorp ou Zen/i);
+    expect(onError.mock.calls[0][0]).not.toMatch(/código 3/);
   });
 });

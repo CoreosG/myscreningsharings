@@ -18,12 +18,46 @@ import {
   supportError,
   fonteIndisponivel,
   opcoesTela,
-} from '/shared/broadcaster.js?v=10';
+} from '/shared/broadcaster.js?v=11';
 
 const $ = (id) => document.getElementById(id);
 
 const query = new URLSearchParams(location.search);
 const token = query.get('t');
+
+const nativeAudioConfig = fetch('/api/config', { cache: 'no-store' })
+  .then((response) => (response.ok ? response.json() : null))
+  .catch(() => null);
+
+async function nativeAudioProof() {
+  const config = await nativeAudioConfig;
+  if (!config?.nativeAudioLocalUrl) {
+    throw new Error(
+      'O capturador local não está disponível. No Firefox, ele funciona somente no PC Windows que está executando o INICIAR.',
+    );
+  }
+
+  let response;
+  try {
+    response = await fetch(`${config.nativeAudioLocalUrl}/proof`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token }),
+      cache: 'no-store',
+      signal: AbortSignal.timeout(4_000),
+    });
+  } catch {
+    throw new Error(
+      'Este navegador não encontrou o capturador neste computador. Se você entrou remotamente, use Chrome, Edge, Brave ou Opera e marque o áudio no seletor.',
+    );
+  }
+
+  if (!response.ok)
+    throw new Error('O capturador local recusou esta transmissão. Reabra a página.');
+  const { proof } = await response.json();
+  if (!proof) throw new Error('O capturador local não devolveu uma autorização válida.');
+  return proof;
+}
 
 const FONTES = ['tela', 'camera'];
 const TITULO = document.title;
@@ -408,6 +442,7 @@ function criarPainel(fonte) {
         mostrarSetup();
         setStatus(reason);
       },
+      nativeAudioProof,
     });
 
     // O broadcaster assume as faixas daqui para a frente, então a referência sai

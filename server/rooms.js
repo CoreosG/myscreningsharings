@@ -775,12 +775,24 @@ export function detachBroadcaster(room, ws) {
 export function watch(room, ws, slot) {
   const entry = room.slots.get(slot);
   if (!entry || !entry.streaming) return;
-  // Repetir o pedido não muda nada, mas custaria um broadcast de estado para a
-  // sala inteira — um cliente em laço faria o servidor inundar todo mundo.
-  if (ws.__watching.has(slot)) return;
+  // Um keyframe pode se perder no proxy da Activity ou numa troca de rede. O
+  // pedido repetido refaz somente o ponto de partida, sem rebroadcast da sala.
+  // O limite impede um cliente alterado de inundar o transmissor.
+  if (ws.__watching.has(slot)) {
+    const agora = Date.now();
+    const ultimo = ws.__lastKeyframeRequest.get(slot) ?? 0;
+    if (agora - ultimo < 1_500) return;
+    ws.__lastKeyframeRequest.set(slot, agora);
+    ws.__primed.delete(slot);
+    if (entry.config) sendJson(ws, { type: 'config', slot, config: entry.config });
+    if (entry.audioConfig) sendJson(ws, { type: 'audio-config', slot, config: entry.audioConfig });
+    requestKeyframe(entry);
+    return;
+  }
 
   ws.__watching.add(slot);
   ws.__primed.delete(slot);
+  ws.__lastKeyframeRequest.set(slot, Date.now());
 
   if (entry.config) sendJson(ws, { type: 'config', slot, config: entry.config });
   if (entry.audioConfig) {
@@ -794,12 +806,14 @@ export function unwatch(room, ws, slot) {
   // Só avisa a sala se algo mudou de fato; ver a nota em watch().
   if (!ws.__watching.delete(slot)) return;
   ws.__primed.delete(slot);
+  ws.__lastKeyframeRequest.delete(slot);
   broadcastState(room);
 }
 
 export function attachViewer(room, ws, info) {
   ws.__primed = new Set();
   ws.__watching = new Set();
+  ws.__lastKeyframeRequest = new Map();
   ws.__info = info;
   ws.__connectedAt = ws.__connectedAt ?? Date.now();
   ws.__mediaBytesOut = ws.__mediaBytesOut ?? 0;
