@@ -915,6 +915,15 @@ function openStream(slot, userId) {
     firstFrameTimer: null,
     player: createPlayer(canvas, {
       onError: (m) => toast(m, true),
+      // Erro de decoder ou deltas sem um keyframe válido não devem deixar a
+      // pessoa olhando para "Conectando…" para sempre. Repetir `watch` faz o
+      // relay reenviar a configuração e pedir um keyframe novo, sem mexer nos
+      // outros espectadores.
+      onResync: () => {
+        if (streams.get(slot) === s && ws?.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'watch', slot }));
+        }
+      },
       onTamanho: () => {
         s.started = true;
         clearTimeout(s.firstFrameTimer);
@@ -930,11 +939,20 @@ function openStream(slot, userId) {
   // O proxy da Activity pode perder o primeiro keyframe durante uma troca de
   // rede. Repetir o pedido reinicia apenas o decoder daquele espectador e
   // recupera sozinho, sem obrigar a fechar a transmissão.
-  s.firstFrameTimer = setTimeout(() => {
-    if (streams.get(slot) === s && !s.started && ws?.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: 'watch', slot }));
-    }
-  }, 3_000);
+  const esperarPrimeiroQuadro = () => {
+    clearTimeout(s.firstFrameTimer);
+    s.firstFrameTimer = setTimeout(() => {
+      if (streams.get(slot) !== s || s.started) return;
+      if (ws?.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'watch', slot }));
+      }
+      // O primeiro pedido também pode se perder durante troca de rede ou de
+      // rota do proxy da Activity. Continua tentando em baixa frequência até
+      // o primeiro quadro, em vez de desistir silenciosamente após uma vez.
+      esperarPrimeiroQuadro();
+    }, 3_000);
+  };
+  esperarPrimeiroQuadro();
 }
 
 /** Liga o som desta transmissão. Chamado quando a config de áudio chega. */

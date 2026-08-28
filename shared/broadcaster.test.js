@@ -782,6 +782,50 @@ describe('quadros', () => {
     }
   });
 
+  it('recupera gradualmente o bitrate depois que a rede estabiliza', async () => {
+    vi.useFakeTimers();
+    try {
+      const onAviso = vi.fn();
+      const stream = telaSimples();
+      prepararCaptura(stream);
+      const b = createBroadcaster(opcoes({ bitrate: 8_000_000, fps: 60, onAviso }));
+      const promessa = b.start();
+      await vi.advanceTimersByTimeAsync(0);
+      const ws = sockets.at(-1);
+      ws.abrir();
+      await promessa;
+
+      const track = stream.getVideoTracks()[0];
+      ws.bufferedAmount = 10 * 1024 * 1024;
+      for (let segundo = 0; segundo < 2; segundo++) {
+        for (let i = 0; i < 20; i++) {
+          processadorDe(track).empurrar(quadro());
+          await vi.advanceTimersByTimeAsync(0);
+        }
+        await vi.advanceTimersByTimeAsync(1_000);
+      }
+      const reduzido = encoders.at(-1).configuracoes.at(-1).bitrate;
+      expect(reduzido).toBeLessThan(8_000_000);
+
+      ws.bufferedAmount = 0;
+      for (let segundo = 0; segundo < 6; segundo++) {
+        for (let i = 0; i < 20; i++) {
+          processadorDe(track).empurrar(quadro());
+          await vi.advanceTimersByTimeAsync(0);
+        }
+        await vi.advanceTimersByTimeAsync(1_000);
+      }
+
+      const recuperado = encoders.at(-1).configuracoes.at(-1).bitrate;
+      expect(recuperado).toBeGreaterThan(reduzido);
+      expect(recuperado).toBeLessThanOrEqual(8_000_000);
+      expect(onAviso).toHaveBeenCalledWith(expect.stringMatching(/rede estabilizou/i));
+      b.stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('reconfigura o encoder quando a fonte muda de tamanho', async () => {
     const { encoder, stream } = await comQuadro(quadro(1280, 720));
 

@@ -233,4 +233,55 @@ describe('captura nativa de áudio', () => {
     expect(onError.mock.calls[0][0]).toMatch(/Firefox, LibreWolf, Waterfox, Floorp ou Zen/i);
     expect(onError.mock.calls[0][0]).not.toMatch(/código 3/);
   });
+
+  it('encerra o helper que nasce mas não confirma que está pronto', async () => {
+    vi.useFakeTimers();
+    try {
+      const d = dependencies();
+      const onError = vi.fn();
+      const bridge = createNativeAudioBridge({
+        ...d.options,
+        spawnProcess: d.spawnProcess,
+        encoderFactory: d.encoderFactory,
+        onError,
+        readyTimeoutMs: 250,
+      });
+
+      bridge.start('firefox');
+      await vi.advanceTimersByTimeAsync(250);
+
+      expect(onError).toHaveBeenCalledWith(expect.stringMatching(/não respondeu a tempo/i));
+      expect(d.child.kill).toHaveBeenCalledOnce();
+      expect(d.encoder.delete).toHaveBeenCalledOnce();
+      expect(bridge.active()).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('cancela o watchdog quando o helper confirma READY', async () => {
+    vi.useFakeTimers();
+    try {
+      const d = dependencies();
+      const onError = vi.fn();
+      const bridge = createNativeAudioBridge({
+        ...d.options,
+        spawnProcess: d.spawnProcess,
+        encoderFactory: d.encoderFactory,
+        onError,
+        readyTimeoutMs: 250,
+      });
+
+      bridge.start('firefox');
+      d.child.stderr.write('READY 42 48000 2 s16le\n');
+      await vi.advanceTimersByTimeAsync(500);
+
+      expect(onError).not.toHaveBeenCalled();
+      expect(d.child.kill).not.toHaveBeenCalled();
+      expect(bridge.active()).toBe(true);
+      bridge.stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

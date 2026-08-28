@@ -15,7 +15,7 @@
  * imagem durante o redimensionamento.
  */
 
-export function createPlayer(canvas, { onError, onTamanho } = {}) {
+export function createPlayer(canvas, { onError, onTamanho, onResync } = {}) {
   const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
 
   let decoder = null;
@@ -26,6 +26,15 @@ export function createPlayer(canvas, { onError, onTamanho } = {}) {
   // e o primeiro quadro cabe um keyframe inteiro de atraso, e o canvas preto
   // desse intervalo é idêntico a um travamento.
   let virgem = true;
+  let lastResyncAt = -Infinity;
+
+  function pedirRessincronizacao() {
+    needKeyframe = true;
+    const now = Date.now();
+    if (now - lastResyncAt < 1_500) return;
+    lastResyncAt = now;
+    onResync?.();
+  }
 
   function start(rawConfig) {
     stop();
@@ -43,7 +52,7 @@ export function createPlayer(canvas, { onError, onTamanho } = {}) {
         // Erro de decodificação normalmente é fluxo fora de sincronia:
         // pedir um keyframe recupera sem derrubar a sessão.
         console.warn('[decoder]', err.message);
-        needKeyframe = true;
+        pedirRessincronizacao();
       },
     });
 
@@ -67,7 +76,10 @@ export function createPlayer(canvas, { onError, onTamanho } = {}) {
     const isKeyframe = view.getUint8(1) === 1;
 
     // Decoder frio só aceita keyframe; deltas antes disso viram erro.
-    if (needKeyframe && !isKeyframe) return;
+    if (needKeyframe && !isKeyframe) {
+      pedirRessincronizacao();
+      return;
+    }
 
     const timestamp = view.getFloat64(2);
     const sentAt = view.getFloat64(10);
@@ -84,7 +96,7 @@ export function createPlayer(canvas, { onError, onTamanho } = {}) {
       needKeyframe = false;
     } catch (err) {
       console.warn('[decode]', err.message);
-      needKeyframe = true;
+      pedirRessincronizacao();
     }
   }
 
@@ -122,6 +134,8 @@ export function createPlayer(canvas, { onError, onTamanho } = {}) {
     }
     decoder = null;
     needKeyframe = true;
+    virgem = true;
+    lastResyncAt = -Infinity;
     lastLagMs = 0;
     if (canvas.width && canvas.height) {
       ctx.fillStyle = '#000';

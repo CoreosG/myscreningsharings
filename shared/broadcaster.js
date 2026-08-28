@@ -64,6 +64,9 @@ const OUTPUT_LIMITS = [
   { width: 1280, height: 720 },
 ];
 const MIN_WS_BUFFER = 128 * 1024;
+const MIN_ADAPTIVE_BITRATE = 1_200_000;
+const NETWORK_BAD_WINDOWS = 2;
+const NETWORK_GOOD_WINDOWS = 6;
 
 const even = (n) => Math.max(2, n - (n % 2));
 const screenContentHint = (fps) => (fps >= 50 ? 'motion' : 'text');
@@ -239,6 +242,8 @@ export function createBroadcaster({
   let networkDrops = 0;
   let outputLimitIndex = 0;
   let networkPressureWindows = 0;
+  let networkHealthyWindows = 0;
+  let requestedBitrate = bitrate;
   let relayCongestion = false;
   let displaySurface = null;
 
@@ -928,10 +933,41 @@ export function createBroadcaster({
     relayCongestion = false;
     const congested =
       relayCongested || (capturedFrames >= 10 && networkDrops / capturedFrames >= 0.2);
-    networkPressureWindows = congested ? networkPressureWindows + 1 : 0;
-    if (networkPressureWindows < 2 || bitrate <= 1_200_000) return;
+    if (!congested) {
+      networkPressureWindows = 0;
+      const enoughFrames = capturedFrames >= Math.max(10, Math.round(fps / 4));
+      const maxBuffered = Math.max(MIN_WS_BUFFER, bitrate / 8 / 4);
+      const outputClear = (ws?.bufferedAmount ?? 0) < maxBuffered / 4;
+      networkHealthyWindows =
+        bitrate < requestedBitrate && enoughFrames && outputClear ? networkHealthyWindows + 1 : 0;
 
-    const nextBitrate = Math.max(1_200_000, Math.floor((bitrate * 0.75) / 100_000) * 100_000);
+      if (networkHealthyWindows < NETWORK_GOOD_WINDOWS) return;
+
+      const nextBitrate = Math.min(
+        requestedBitrate,
+        Math.ceil(Math.max(bitrate * 1.2, bitrate + 300_000) / 100_000) * 100_000,
+      );
+      networkHealthyWindows = 0;
+      if (nextBitrate <= bitrate) return;
+
+      bitrate = nextBitrate;
+      config = { ...config, bitrate };
+      encoder.configure(config);
+      wantKeyframe = true;
+      onAviso?.(
+        `A rede estabilizou; a qualidade subiu para ${(bitrate / 1_000_000).toFixed(1)} Mb/s.`,
+      );
+      return;
+    }
+
+    networkHealthyWindows = 0;
+    networkPressureWindows++;
+    if (networkPressureWindows < NETWORK_BAD_WINDOWS || bitrate <= MIN_ADAPTIVE_BITRATE) return;
+
+    const nextBitrate = Math.max(
+      MIN_ADAPTIVE_BITRATE,
+      Math.floor((bitrate * 0.75) / 100_000) * 100_000,
+    );
     if (nextBitrate >= bitrate) return;
 
     bitrate = nextBitrate;
@@ -1181,7 +1217,10 @@ export function createBroadcaster({
 
   /** Ajusta qualidade e taxa de quadros com a transmissão no ar. */
   function setQuality({ bitrate: nextBitrate, fps: nextFps } = {}) {
-    if (nextBitrate) bitrate = nextBitrate;
+    if (nextBitrate) {
+      bitrate = nextBitrate;
+      requestedBitrate = nextBitrate;
+    }
     if (nextFps) fps = nextFps;
     if (encoder?.state !== 'configured') return;
 
@@ -1193,6 +1232,7 @@ export function createBroadcaster({
     };
     outputLimitIndex = 0;
     networkPressureWindows = 0;
+    networkHealthyWindows = 0;
     relayCongestion = false;
     srcW = 0;
     srcH = 0;

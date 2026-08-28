@@ -678,6 +678,7 @@ export function pushChunk(room, entry, chunk) {
   const isAudio = tipo === AUDIO;
   let sentCopies = 0;
   let droppedCopies = 0;
+  let eligibleCopies = 0;
 
   for (const v of room.viewers) {
     if (v.readyState !== v.OPEN) continue;
@@ -688,6 +689,7 @@ export function pushChunk(room, entry, chunk) {
     // Áudio não depende de keyframe — cada pacote Opus se decodifica sozinho —,
     // então não passa pelo controle de "já recebeu ponto de partida".
     if (isAudio) {
+      eligibleCopies++;
       if (v.bufferedAmount > MAX_BUFFERED_BYTES) {
         room.droppedChunks++;
         entry.droppedChunks++;
@@ -701,6 +703,7 @@ export function pushChunk(room, entry, chunk) {
     }
 
     if (isKeyframe) {
+      eligibleCopies++;
       if (v.bufferedAmount > MAX_BUFFERED_BYTES * 2) {
         room.droppedChunks++;
         entry.droppedChunks++;
@@ -715,6 +718,7 @@ export function pushChunk(room, entry, chunk) {
     }
 
     if (!v.__primed.has(entry.slot)) continue;
+    eligibleCopies++;
 
     if (v.bufferedAmount > MAX_BUFFERED_BYTES) {
       room.droppedChunks++;
@@ -739,11 +743,15 @@ export function pushChunk(room, entry, chunk) {
   // bitrate enquanto o espectador descarta a transmissão para sempre.
   const now = Date.now();
   if (
-    droppedCopies > 0 &&
+    droppedCopies > eligibleCopies / 2 &&
     (entry.lastCongestionNoticeAt === null || now - entry.lastCongestionNoticeAt >= 1_000)
   ) {
     entry.lastCongestionNoticeAt = now;
-    sendJson(entry.ws, { type: 'relay-congestion', droppedViewers: droppedCopies });
+    sendJson(entry.ws, {
+      type: 'relay-congestion',
+      droppedViewers: droppedCopies,
+      affectedViewers: eligibleCopies,
+    });
   }
 }
 

@@ -24,7 +24,7 @@ function open(url) {
   });
 }
 
-function waitFor(ws, predicate, label) {
+function waitFor(ws, predicate, label, timeoutMs = 7000) {
   const existing = ws.received.find(predicate);
   if (existing) return Promise.resolve(existing);
 
@@ -32,7 +32,7 @@ function waitFor(ws, predicate, label) {
     const timeout = setTimeout(() => {
       ws.off('message', receive);
       reject(new Error(`tempo esgotado esperando ${label}`));
-    }, 7000);
+    }, timeoutMs);
 
     function receive(data, binary) {
       const item = { data, binary };
@@ -89,7 +89,23 @@ try {
   viewer.send(JSON.stringify({ type: 'watch', slot }));
 
   broadcaster.send(JSON.stringify({ type: 'native-audio-start', proof: await localProof() }));
-  await waitFor(broadcaster, jsonType('native-audio-ready'), 'WASAPI ficar pronto');
+  const nativeStatus = await waitFor(
+    broadcaster,
+    ({ data, binary }) => {
+      if (binary) return false;
+      try {
+        return ['native-audio-ready', 'native-audio-error'].includes(
+          JSON.parse(data.toString()).type,
+        );
+      } catch {
+        return false;
+      }
+    },
+    'WASAPI ficar pronto',
+    10_000,
+  );
+  const status = JSON.parse(nativeStatus.data.toString());
+  if (status.type === 'native-audio-error') throw new Error(status.message);
   const config = await waitFor(viewer, jsonType('audio-config'), 'config Opus');
   const packet = await waitFor(
     viewer,

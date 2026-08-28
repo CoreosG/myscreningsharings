@@ -12,11 +12,16 @@
 #include <io.h>
 #include <tlhelp32.h>
 #include <wrl/client.h>
+#include <avrt.h>
 
 #include <algorithm>
 #include <atomic>
+#include <condition_variable>
 #include <cwctype>
+#include <deque>
+#include <mutex>
 #include <string>
+#include <thread>
 #include <unordered_set>
 #include <vector>
 
@@ -172,6 +177,63 @@ bool writeAll(HANDLE output, const BYTE* data, DWORD bytes) {
   return bytes == 0;
 }
 
+// O callback de captura não pode ficar bloqueado porque o processo Node levou
+// alguns milissegundos extras para ler stdout. Uma fila curta desacopla os dois
+// ritmos; se ela atingir meio segundo, descarta áudio antigo em vez de aumentar
+// indefinidamente o atraso de uma transmissão ao vivo.
+class PcmQueue {
+ public:
+  static constexpr size_t kMaxBytes = 48000 * 2 * 2 / 2;
+
+  void push(std::vector<BYTE> block) {
+    std::lock_guard lock(mutex_);
+    while (!blocks_.empty() && queuedBytes_ + block.size() > kMaxBytes) {
+      queuedBytes_ -= blocks_.front().size();
+      blocks_.pop_front();
+    }
+    if (block.size() > kMaxBytes) return;
+    queuedBytes_ += block.size();
+    blocks_.push_back(std::move(block));
+    ready_.notify_one();
+  }
+
+  void finish() {
+    {
+      std::lock_guard lock(mutex_);
+      finished_ = true;
+    }
+    ready_.notify_all();
+  }
+
+  void writeTo(HANDLE output) {
+    while (running) {
+      std::vector<BYTE> block;
+      {
+        std::unique_lock lock(mutex_);
+        ready_.wait(lock, [this] { return finished_ || !blocks_.empty(); });
+        if (blocks_.empty()) {
+          if (finished_) break;
+          continue;
+        }
+        block = std::move(blocks_.front());
+        blocks_.pop_front();
+        queuedBytes_ -= block.size();
+      }
+      if (!writeAll(output, block.data(), static_cast<DWORD>(block.size()))) {
+        running = false;
+        break;
+      }
+    }
+  }
+
+ private:
+  std::mutex mutex_;
+  std::condition_variable ready_;
+  std::deque<std::vector<BYTE>> blocks_;
+  size_t queuedBytes_ = 0;
+  bool finished_ = false;
+};
+
 }  // namespace
 
 int wmain(int argc, wchar_t** argv) {
@@ -273,7 +335,15 @@ int wmain(int argc, wchar_t** argv) {
   fflush(stderr);
 
   const HANDLE output = GetStdHandle(STD_OUTPUT_HANDLE);
-  std::vector<BYTE> silence;
+  PcmQueue pcmQueue;
+  std::thread writer([&] { pcmQueue.writeTo(output); });
+
+  // WASAPI é sensível a uma thread que perde sua janela de processamento.
+  // MMCSS dá prioridade de áudio sem transformar a captura numa thread de
+  // tempo real que poderia prejudicar o restante do sistema.
+  DWORD mmcssTask = 0;
+  HANDLE mmcss = AvSetMmThreadCharacteristicsW(L"Pro Audio", &mmcssTask);
+  if (mmcss) AvSetMmThreadPriority(mmcss, AVRT_PRIORITY_HIGH);
 
   while (running) {
     const DWORD wait = WaitForSingleObject(sampleReady, 500);
@@ -293,22 +363,22 @@ int wmain(int argc, wchar_t** argv) {
       }
 
       const DWORD bytes = frames * format.nBlockAlign;
-      const BYTE* outputData = data;
+      std::vector<BYTE> block(bytes);
       if ((captureFlags & AUDCLNT_BUFFERFLAGS_SILENT) || !data) {
-        silence.assign(bytes, 0);
-        outputData = silence.data();
+        std::fill(block.begin(), block.end(), static_cast<BYTE>(0));
+      } else {
+        std::copy_n(data, bytes, block.data());
       }
 
-      const bool written = writeAll(output, outputData, bytes);
       capture->ReleaseBuffer(frames);
-      if (!written) {
-        running = false;
-        break;
-      }
+      pcmQueue.push(std::move(block));
     }
   }
 
   client->Stop();
+  pcmQueue.finish();
+  writer.join();
+  if (mmcss) AvRevertMmThreadCharacteristics(mmcss);
   CloseHandle(sampleReady);
   if (SUCCEEDED(comResult)) CoUninitialize();
   return 0;

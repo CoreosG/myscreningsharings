@@ -9,7 +9,7 @@ Projeto independente de [DevilNine](https://github.com/DevilNine), criado como e
 - **ZIP pronto para uso:** baixa e verifica Node.js 22, dependências e `cloudflared` dentro do projeto; não exige Node/npm global.
 - **Três sistemas:** `INICIAR.bat` no Windows 10/11, `INICIAR.sh` nas principais distribuições Linux e `INICIAR.command` no macOS Intel/Apple Silicon.
 - **Tela e áudio:** guia com áudio em Chromium; Firefox e derivados no PC Windows anfitrião usam WASAPI isolado; câmera fica separada da voz do Discord.
-- **Qualidade adaptativa:** perfis de 30/60 fps até 1080p, hardware encoding quando disponível e redução automática sob CPU/rede congestionada.
+- **Qualidade adaptativa:** perfis de 30/60 fps até 1080p, hardware encoding quando disponível, redução sob congestionamento e recuperação gradual quando a rede estabiliza.
 - **Vários transmissores:** cada participante recebe canal próprio; espectadores escolhem o que assistir sem baixar todas as telas.
 - **Cloudflare supervisionado:** reconexão automática, terminal limpo e opção de Named Tunnel para endereço fixo.
 - **Firefox e navegadores Chromium:** caminhos de captura próprios, sem o bloqueio artificial do projeto-base.
@@ -85,7 +85,7 @@ O supervisor reinicia `cloudflared` com espera progressiva. Named Tunnel mantém
 - **Activity em branco:** confira o Target atual e reabra a Activity para descartar o bundle antigo.
 - **“O site não compilou”:** o launcher reinstala o lockfile e tenta novamente; se falhar, envie o erro real mostrado na janela.
 - **Áudio ausente:** no Chromium marque áudio no seletor; no Firefox/derivado do PC anfitrião mantenha o navegador aberto e aguarde “Áudio isolado do Firefox ligado”. O código 3 agora identifica automaticamente os derivados conhecidos e explica quando nenhum está aberto.
-- **Outra pessoa fica carregando:** o cliente repede automaticamente a configuração e pede outro keyframe quando o primeiro se perde. Se persistir, teste o perfil Leve e diagnostique sem VPN.
+- **Outra pessoa fica carregando:** o cliente repete automaticamente a configuração e pede novos keyframes até o primeiro quadro chegar; erros posteriores do decoder também se recuperam. Se persistir, teste o perfil Leve e diagnostique sem VPN.
 - **Porta 3001 ocupada:** feche outra instância deste projeto; não finalize processos desconhecidos.
 - **macOS bloqueou o `.command`:** clique com o botão direito → **Abrir**. Se o ZIP perdeu a permissão, siga o [guia macOS](docs/macos.md).
 - **Portal cai ao clicar em Redirecionamento:** recarregue sem tradução/extensões ou use janela anônima/outro navegador; veja o [guia do erro `removeChild`](docs/discord-portal.md).

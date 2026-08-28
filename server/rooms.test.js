@@ -584,7 +584,23 @@ describe('pushChunk', () => {
       expect(entry.ws.mensagens()).toContainEqual({
         type: 'relay-congestion',
         droppedViewers: 1,
+        affectedViewers: 1,
       });
+    });
+
+    it('não derruba a qualidade de todos por causa de uma minoria lenta', () => {
+      const { room, entry, lento } = entupido(3 * 1024 * 1024);
+      lento.__primed.add(entry.slot);
+      const rapido = socket();
+      R.attachViewer(room, rapido, pessoa('rapido'));
+      R.watch(room, rapido, entry.slot);
+      rapido.__primed.add(entry.slot);
+      entry.ws.limpar();
+
+      R.pushChunk(room, entry, quadro(entry.slot, DELTA));
+
+      expect(rapido.binarios()).toHaveLength(1);
+      expect(entry.ws.tipos()).not.toContain('relay-congestion');
     });
 
     it('limita o aviso de congestionamento a um por segundo', () => {

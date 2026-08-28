@@ -75,13 +75,18 @@ O áudio vai pelo mesmo socket e pelo mesmo cabeçalho do vídeo, distinguido s�
 pelo byte de tipo. Há dois caminhos, ambos codificados em Opus a 96 kbps:
 
 - Chromium usa a faixa retornada por `getDisplayMedia()`. Uma guia é isolada
-  por construção; o áudio do monitor é rejeitado porque incluiria o Discord e
-  causaria eco.
+  por construção. O áudio do monitor inteiro é aceito somente após a escolha
+  explícita no diálogo do navegador e vem acompanhado de aviso, pois pode
+  incluir Discord, notificações e todos os outros sons do computador.
 - Firefox não implementa áudio em `getDisplayMedia()` nem
   `MediaStreamTrackProcessor`. No Windows, o servidor inicia
   `audio-loopback.exe`, que usa WASAPI Process Loopback para capturar somente a
   árvore de processos de `firefox.exe`. O helper entrega PCM estéreo de 48 kHz
   em blocos de 20 ms; o servidor codifica Opus e usa o mesmo tipo 3 do protocolo.
+  A thread WASAPI usa prioridade multimídia e não escreve diretamente no pipe:
+  uma fila limitada absorve pausas curtas do Node e descarta áudio antigo antes
+  que uma leitura lenta vire atraso crescente. Um watchdog encerra o helper se
+  ele nascer mas não confirmar `READY` em oito segundos.
 
 A captura nativa exclui o Discord e os demais aplicativos, mas seu limite é a
 árvore de processos, não o título exato da janela. Várias janelas do Firefox
@@ -137,8 +142,9 @@ Controle vai em JSON: `start`, `config`, `audio-config`, `stop`
 (servidor → clientes). O transmissor só começa depois de receber `slot`; isso
 impede que participantes posteriores enviem quadros identificados como se
 fossem do primeiro. `relay-congestion` fecha o ciclo de contrapressão: quando a
-fila de um espectador estoura, o emissor reduz o bitrate em vez de acumular
-atraso indefinidamente.
+fila da maioria dos espectadores ativos estoura, o emissor reduz o bitrate em
+vez de acumular atraso indefinidamente. Uma única conexão lenta não reduz a
+qualidade de todos quando os demais continuam saudáveis.
 
 ## Detalhes que não são acidentais
 
@@ -160,6 +166,9 @@ atraso indefinidamente.
   ms, quadros são descartados antes do encoder para não transformar banda
   limitada em vários segundos de atraso; após duas janelas consecutivas de
   congestionamento, o bitrate cai 25%, até o piso de 1,2 Mb/s.
+  Depois de seis janelas saudáveis consecutivas, ele volta a subir em passos
+  pequenos até o perfil escolhido pelo usuário; uma oscilação curta não deixa
+  a transmissão presa em baixa qualidade pelo resto da sessão.
 - **`frame.close()`** depois de desenhar. `VideoFrame` segura memória de GPU;
   sem isso a aba trava em segundos.
 - **Descartar quadro quando a fila do codificador passa de 2.** Fila vira
@@ -173,6 +182,10 @@ atraso indefinidamente.
 - **Backpressure no relay.** Se o socket de alguém acumula mais de 2 MB, o
   servidor descarta quadros para essa pessoa em vez de enfileirar. Sem isso, um
   espectador com internet ruim derruba o processo por consumo de memória.
+- **Ressincronização persistente.** Enquanto o primeiro quadro não chega, o
+  espectador repete a solicitação a cada três segundos. Deltas recebidos com o
+  decoder frio e erros de decodificação pedem uma configuração e um keyframe
+  novos, evitando um “Conectando…” infinito após perda de pacote ou troca de rede.
 - **`/.proxy/`** em todo fetch e WebSocket feito de dentro da atividade — é
   assim que o Discord roteia para o seu servidor.
 - **Client ID vem do servidor, não do build.** Embutir no bundle obrigava a

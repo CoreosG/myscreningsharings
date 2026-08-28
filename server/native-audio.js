@@ -58,6 +58,7 @@ export function createNativeAudioBridge({
   onPacket,
   onStatus,
   onError,
+  readyTimeoutMs = 8_000,
 } = {}) {
   let child = null;
   let encoder = null;
@@ -65,8 +66,15 @@ export function createNativeAudioBridge({
   let timestamp = 0;
   let configSent = false;
   let stopping = false;
+  let readyTimer = null;
+
+  function clearReadyTimer() {
+    if (readyTimer) clearTimeout(readyTimer);
+    readyTimer = null;
+  }
 
   function cleanup() {
+    clearReadyTimer();
     encoder?.delete?.();
     encoder = null;
     child = null;
@@ -132,8 +140,11 @@ export function createNativeAudioBridge({
       const lines = stderr.split(/\r?\n/);
       stderr = lines.pop() ?? '';
       for (const line of lines) {
-        if (line.startsWith('READY ')) onStatus?.('ready', line);
-        else if (line.trim()) {
+        if (line.startsWith('READY ')) {
+          if (stopping || !child) continue;
+          clearReadyTimer();
+          onStatus?.('ready', line);
+        } else if (line.trim()) {
           diagnostics.push(line.trim());
           onStatus?.('diagnostic', line.trim());
         }
@@ -158,6 +169,23 @@ export function createNativeAudioBridge({
         report(detalhe && code !== 3 ? `${message} Detalhe: ${detalhe}` : message);
       }
     });
+
+    // Um helper pode nascer e ficar preso na ativação do driver sem emitir
+    // erro nem READY. Sem prazo, a interface permanece para sempre em
+    // "iniciando áudio" e a captura fica órfã. O watchdog encerra apenas esse
+    // processo local; o vídeo continua normalmente e a pessoa pode tentar de
+    // novo depois de atualizar/reiniciar o driver.
+    readyTimer = setTimeout(() => {
+      if (!child || stopping) return;
+      report(
+        'A captura de áudio não respondeu a tempo. Reinicie o navegador ou o dispositivo de áudio e tente novamente.',
+      );
+      const hangingChild = child;
+      stopping = true;
+      cleanup();
+      hangingChild.kill();
+    }, readyTimeoutMs);
+    readyTimer.unref?.();
   }
 
   function stop() {
