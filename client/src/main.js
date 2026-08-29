@@ -1,8 +1,10 @@
-import { DiscordSDK } from '@discord/embedded-app-sdk';
+import { Common, DiscordSDK } from '@discord/embedded-app-sdk';
 import { createPlayer } from './player.js';
 import { createAudio } from './audio.js';
 import { withTimeout } from './async.js';
+import { enterImmersive, fullscreenElement, leaveImmersive } from './immersive.js';
 import { canCaptureScreen, defaultBroadcastQuality, isMobileClient } from './platform.js';
+import { recoverableSlots, shouldRecoverStream } from './recovery.js';
 import { createBroadcaster } from '../../shared/broadcaster.js';
 
 const $ = (id) => document.getElementById(id);
@@ -84,6 +86,8 @@ let volumeAntes = volume || 1;
 // de quem assiste precisa sobreviver a isso.
 let activeSlot = null;
 let telaCheia = false;
+let fullscreenNativo = false;
+let geracaoImersiva = 0;
 // O que o link da atividade pediu: qual tela no palco e se já em tela cheia.
 // Não dá para aplicar no arranque — a sala ainda não tem transmissão nenhuma, e
 // o render zera a escolha justamente nesse estado. Fica guardado até a tela
@@ -105,6 +109,60 @@ function toast(msg, isError = false) {
   el.hidden = false;
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => (el.hidden = true), 6000);
+}
+
+/**
+ * Alterna a visualização cheia e tenta promovê-la ao fullscreen real.
+ *
+ * A classe CSS muda de imediato e nunca depende das APIs opcionais. A chamada
+ * nativa também começa ainda dentro do gesto do usuário, exigência dos
+ * navegadores móveis. No Discord, o comando de orientação é o caminho oficial
+ * para Android/iOS e continua funcionando quando o iframe nega fullscreen.
+ */
+const opcoesDeImersao = () => {
+  const orientation = Common.OrientationLockStateTypeObject;
+  const discordMovel = inDiscord && clienteMovel ? sdk : null;
+  return { orientation, discordMovel };
+};
+
+function solicitarImersao({ gesto = false } = {}) {
+  const geracao = ++geracaoImersiva;
+  const { orientation, discordMovel } = opcoesDeImersao();
+
+  void enterImmersive({
+    // Sem gesto transitório o navegador recusaria. O SDK do Discord não tem
+    // essa exigência e ainda pode orientar uma abertura automática por link.
+    element: gesto ? $('app') : null,
+    sdk: discordMovel,
+    landscapeState: orientation.LANDSCAPE,
+  }).then(({ native }) => {
+    if (geracao !== geracaoImersiva) {
+      if (native && !telaCheia) liberarImersao();
+      return;
+    }
+    fullscreenNativo = native;
+  });
+}
+
+function liberarImersao() {
+  geracaoImersiva++;
+  fullscreenNativo = false;
+  const { orientation, discordMovel } = opcoesDeImersao();
+  void leaveImmersive({ sdk: discordMovel, unlockedState: orientation.UNLOCKED });
+}
+
+function definirTelaCheia(ativa, { gesto = false } = {}) {
+  if (activeSlot === null && ativa) return;
+
+  telaCheia = ativa;
+  renderGrid();
+
+  if (ativa) {
+    solicitarImersao({ gesto });
+    return;
+  }
+
+  liberarImersao();
 }
 
 function setEmpty(title, text, retry = false) {
@@ -177,6 +235,36 @@ function watchSlot(slot) {
     startStream(slot, info.config);
   }
   renderGrid();
+}
+
+function pedirRecuperacao(slot, { imediata = false, motivo = 'stall' } = {}) {
+  if (document.visibilityState === 'hidden' || ws?.readyState !== WebSocket.OPEN) return false;
+  if (!available.has(slot) || !watching.has(slot)) return false;
+
+  const s = streams.get(slot);
+  const agora = Date.now();
+  if (!imediata && s && agora - s.lastRecoveryAt < 2_500) return false;
+  if (s) s.lastRecoveryAt = agora;
+
+  ws.send(JSON.stringify({ type: 'watch', slot }));
+  ws.send(
+    JSON.stringify({
+      type: 'diagnostic',
+      event: 'viewer-recovery',
+      reason: motivo,
+      mobile: clienteMovel,
+      discord: inDiscord,
+      fullscreen: telaCheia,
+    }),
+  );
+  return true;
+}
+
+function recuperarTelasVisiveis() {
+  if (document.visibilityState === 'hidden') return;
+  for (const slot of recoverableSlots(watching, available)) {
+    pedirRecuperacao(slot, { imediata: true, motivo: 'resume' });
+  }
 }
 
 function unwatchSlot(slot) {
@@ -277,6 +365,7 @@ function renderGrid() {
 
   if (!casters.length) {
     activeSlot = null;
+    if (telaCheia) liberarImersao();
     telaCheia = false;
   } else if (activeSlot === null || !available.has(activeSlot)) {
     // Sempre há uma tela em destaque quando existe transmissão: chegar numa
@@ -313,6 +402,7 @@ function renderGrid() {
 
     activeSlot = alvo;
     telaCheia = cheia;
+    if (cheia) queueMicrotask(() => solicitarImersao());
     // Adiado porque watchSlot chama renderGrid, e estamos dentro de um.
     if (!watching.has(alvo)) queueMicrotask(() => watchSlot(alvo));
   }
@@ -332,6 +422,7 @@ function renderGrid() {
   // e só faria os controles parecerem quebrados.
   $('app').classList.toggle('palco', noPalco);
   $('fullscreen').classList.toggle('on', telaCheia);
+  $('fullscreen').setAttribute('aria-pressed', String(telaCheia));
   // A dica e o nome acessível andam juntos: o botão faz duas coisas conforme o
   // estado, e anunciar sempre a mesma coisa mentiria para quem usa leitor.
   const rotulo = telaCheia ? 'Sair da tela cheia' : 'Tela cheia';
@@ -479,9 +570,12 @@ function buildTile(p, { palco = false, semVideo = false, slot: slotDado = null }
   }
 
   const aoClicar = () => {
-    if (palco) telaCheia = !telaCheia;
-    else activeSlot = slot;
-    renderGrid();
+    if (palco) {
+      definirTelaCheia(!telaCheia, { gesto: true });
+    } else {
+      activeSlot = slot;
+      renderGrid();
+    }
   };
 
   if (stream) {
@@ -913,6 +1007,8 @@ function openStream(slot, userId) {
     // em vez de uma caixa preta que não se distingue de um travamento.
     started: false,
     firstFrameTimer: null,
+    lastFrameAt: Date.now(),
+    lastRecoveryAt: 0,
     player: createPlayer(canvas, {
       onError: (m) => toast(m, true),
       // Erro de decoder ou deltas sem um keyframe válido não devem deixar a
@@ -929,6 +1025,9 @@ function openStream(slot, userId) {
         clearTimeout(s.firstFrameTimer);
         s.firstFrameTimer = null;
         renderGrid();
+      },
+      onFrame: () => {
+        s.lastFrameAt = Date.now();
       },
     }),
     // Só nasce quando a transmissão anuncia que tem som — nem toda tem.
@@ -1016,6 +1115,21 @@ function closeAllStreams() {
 function ensureStatsTimer() {
   if (lagTimer) return;
   lagTimer = setInterval(() => {
+    const agora = Date.now();
+    for (const [slot, stream] of streams) {
+      if (
+        shouldRecoverStream({
+          visible: document.visibilityState !== 'hidden',
+          started: stream.started,
+          lastFrameAt: stream.lastFrameAt,
+          lastRecoveryAt: stream.lastRecoveryAt,
+          now: agora,
+        })
+      ) {
+        pedirRecuperacao(slot, { motivo: 'stall' });
+      }
+    }
+
     const s = streams.get(activeSlot) ?? streams.values().next().value;
     if (!s) return;
     $('pLag').textContent = `${Math.max(0, s.player.getLag())} ms`;
@@ -1251,6 +1365,7 @@ function limparSala() {
   participants = [];
   lastRoomState = null;
   activeSlot = null;
+  if (telaCheia) liberarImersao();
   telaCheia = false;
 
   if (roomInfo) remove(`sala:${roomInfo.id}`);
@@ -1714,6 +1829,12 @@ function connect() {
       for (const slot of [...available.keys()]) if (!live.has(slot)) available.delete(slot);
       for (const slot of [...streams.keys()]) if (!live.has(slot)) closeStream(slot);
       for (const slot of [...watching]) if (!live.has(slot)) watching.delete(slot);
+      // O socket pode cair enquanto o celular suspende a Activity. A intenção
+      // de assistir sobrevive à conexão; o servidor novo precisa recebê-la de
+      // novo para reenviar config e pedir outro keyframe.
+      for (const slot of recoverableSlots(watching, available)) {
+        pedirRecuperacao(slot, { motivo: 'reconnect' });
+      }
       renderGrid();
       renderBar();
     } else if (msg.type === 'stream-start') {
@@ -1756,7 +1877,6 @@ function connect() {
   ws.addEventListener('close', () => {
     closeAllStreams();
     available.clear();
-    watching.clear();
     participants = [];
     renderGrid();
 
@@ -2299,9 +2419,28 @@ acordarBarras();
 // tela no palco — aqui só se troca a intenção.
 $('fullscreen').addEventListener('click', () => {
   if (activeSlot === null) return;
-  telaCheia = !telaCheia;
-  renderGrid();
+  definirTelaCheia(!telaCheia, { gesto: true });
 });
+
+const aoMudarFullscreenNativo = () => {
+  const ativo = Boolean(fullscreenElement());
+  if (ativo) {
+    fullscreenNativo = true;
+    return;
+  }
+
+  // Voltar/gesto do sistema encerra também o modo visual. Se a API foi negada
+  // desde o começo, fullscreenNativo fica false e o fallback CSS permanece.
+  if (fullscreenNativo && telaCheia) definirTelaCheia(false);
+  fullscreenNativo = false;
+};
+
+document.addEventListener('fullscreenchange', aoMudarFullscreenNativo);
+document.addEventListener('webkitfullscreenchange', aoMudarFullscreenNativo);
+
+document.addEventListener('visibilitychange', recuperarTelasVisiveis);
+window.addEventListener('pageshow', recuperarTelasVisiveis);
+window.addEventListener('online', recuperarTelasVisiveis);
 
 window.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
@@ -2316,8 +2455,7 @@ window.addEventListener('keydown', (e) => {
 
   // Esc sai da tela cheia — é o reflexo de todo mundo.
   if (telaCheia) {
-    telaCheia = false;
-    renderGrid();
+    definirTelaCheia(false);
   }
 });
 

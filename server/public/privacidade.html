@@ -9,13 +9,13 @@
   <body>
     <main>
       <h1>Política de Privacidade</h1>
-      <p class="data">Última atualização: 18 de agosto de 2026</p>
+      <p class="data">Última atualização: 28 de agosto de 2026</p>
 
       <div class="resumo">
         <p><strong>Em resumo:</strong></p>
         <ul>
           <li>A sua tela e o seu áudio <strong>nunca são gravados</strong>. Eles atravessam o servidor em tempo real e são descartados no mesmo instante.</li>
-          <li>Não existe banco de dados. Nada é escrito em disco.</li>
+          <li>Não existe banco de dados de salas ou mídia. A instalação pode manter um diagnóstico técnico sanitizado em disco; ele não é enviado por padrão.</li>
           <li>Do Discord recebemos apenas <strong>id, nome de usuário e foto de perfil</strong>. Não temos acesso ao seu e-mail, às suas mensagens nem à sua lista de servidores.</li>
           <li>Quando a sala esvazia, ela deixa de existir em cerca de 12 segundos — e tudo que havia nela some junto.</li>
         </ul>
@@ -72,6 +72,14 @@
         pessoas que pediram para assistir. Esses pedaços passam pela memória do servidor apenas
         durante o instante do repasse.
       </p>
+
+      <h3>2.4 Diagnóstico técnico</h3>
+      <p>
+        Para ajudar a identificar falhas de inicialização e retomada, a instalação pode registrar
+        eventos técnicos como versão do Node.js, sistema operacional, etapa que falhou e pedido de
+        recuperação do player. O registro não inclui tela, áudio, nomes, IDs do Discord, endereço
+        IP, Client Secret, tokens ou URLs completas; campos sensíveis são removidos antes da escrita.
+      </p>
       <p>
         <strong>Nada disso é gravado, armazenado ou analisado.</strong> Não há gravação, captura de
         quadros, transcrição, reconhecimento de imagem nem qualquer outro processamento do que
@@ -81,8 +89,9 @@
 
       <h2>3. Onde os dados ficam</h2>
       <p>
-        Não existe banco de dados. O programa não grava arquivos: salas, participantes e senhas
-        embaralhadas vivem apenas na memória do processo enquanto ele está no ar.
+        Não existe banco de dados. Salas, participantes e senhas embaralhadas vivem apenas na
+        memória do processo enquanto ele está no ar. O diagnóstico técnico opcional é a única
+        persistência criada pelo servidor para suporte.
       </p>
       <div class="tabela">
         <table>
@@ -114,12 +123,17 @@
               <td>Memória do servidor, em cache</td>
               <td>Até ser descartada por entrada mais nova</td>
             </tr>
+            <tr>
+              <td>Eventos técnicos sanitizados</td>
+              <td><code>.logs/diagnostico.jsonl</code> no servidor do operador</td>
+              <td>Rotação em 1 MB, mantendo somente a cópia anterior</td>
+            </tr>
           </tbody>
         </table>
       </div>
       <p>
-        Reiniciar o servidor apaga tudo que estava em memória. Mensagens de diagnóstico podem
-        aparecer no terminal de quem opera a instalação, mas o programa não grava arquivos de log.
+        Reiniciar o servidor apaga tudo que estava em memória. O operador pode desligar o registro
+        com <code>DIAGNOSTICO_LOCAL=0</code> e apagar a pasta <code>.logs</code> a qualquer momento.
       </p>
 
       <h2>4. Armazenamento no seu navegador</h2>
@@ -150,6 +164,12 @@
           <strong>Outras pessoas da sala:</strong> veem o seu nome, a sua foto e — se você
           transmitir — a sua tela. Quem transmite também vê a lista de quem está assistindo.
         </li>
+        <li>
+          <strong>Coletor de diagnóstico do operador:</strong> não existe na configuração padrão.
+          Se o operador preencher <code>DIAGNOSTICO_UPLOAD_URL</code>, os eventos técnicos
+          sanitizados podem ser enviados ao endpoint HTTPS escolhido por ele. Essa instalação deve
+          informar qual endpoint usa e por quanto tempo ele conserva os registros.
+        </li>
       </ul>
       <p>
         A sua foto de perfil é buscada pelo servidor e repassada a você, de modo que o seu navegador
@@ -157,7 +177,8 @@
       </p>
       <p>
         Dados podem ser divulgados se houver ordem judicial ou obrigação legal — na prática, porém,
-        não há histórico a entregar: nada é retido.
+        os registros em memória são efêmeros e o eventual diagnóstico contém apenas eventos
+        técnicos sanitizados.
       </p>
 
       <h2>6. Segurança</h2>
@@ -183,6 +204,7 @@
         <li><strong>Eliminar:</strong> saia da sala. Quando ela esvazia, tudo que havia nela deixa de existir.</li>
         <li><strong>Corrigir:</strong> troque o apelido pelo botão de perfil.</li>
         <li><strong>Apagar do seu lado:</strong> limpe os dados do site no navegador.</li>
+        <li><strong>Apagar diagnóstico:</strong> solicite ao operador da instalação que remova os arquivos locais ou os registros do coletor que ele próprio configurou.</li>
         <li><strong>Revogar o acesso:</strong> em Configurações do Discord → Aplicativos Autorizados, remova a autorização a qualquer momento.</li>
       </ul>
       <p>Para qualquer pedido ou dúvida, use os contatos da seção 10.</p>

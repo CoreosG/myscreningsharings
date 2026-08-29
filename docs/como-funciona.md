@@ -185,7 +185,11 @@ qualidade de todos quando os demais continuam saudáveis.
 - **Ressincronização persistente.** Enquanto o primeiro quadro não chega, o
   espectador repete a solicitação a cada três segundos. Deltas recebidos com o
   decoder frio e erros de decodificação pedem uma configuração e um keyframe
-  novos, evitando um “Conectando…” infinito após perda de pacote ou troca de rede.
+  novos. Depois do primeiro quadro, um watchdog também detecta fluxo parado;
+  `visibilitychange`, `pageshow`, reconexão WebSocket e retorno da rede disparam
+  recuperação imediata. O transmissor atende o keyframe pendente até quando a
+  imagem é idêntica à anterior, evitando depender de movimento do mouse para
+  sair de “Conectando…” no celular.
 - **`/.proxy/`** em todo fetch e WebSocket feito de dentro da atividade — é
   assim que o Discord roteia para o seu servidor.
 - **Client ID vem do servidor, não do build.** Embutir no bundle obrigava a

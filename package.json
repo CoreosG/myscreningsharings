@@ -27,6 +27,7 @@
     "diagnostico:windows": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/windows-bootstrap.ps1 -Diagnostico",
     "diagnostico:linux": "sh scripts/linux-bootstrap.sh --diagnostico",
     "diagnostico:macos": "sh scripts/macos-bootstrap.sh --diagnostico",
+    "diagnostico:exportar": "node scripts/export-diagnostics.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "coverage": "vitest run --coverage",

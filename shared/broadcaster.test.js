@@ -1343,6 +1343,34 @@ describe('sem MediaStreamTrackProcessor', () => {
     b.stop();
   });
 
+  it('gera o keyframe pedido mesmo quando a janela compartilhada está parada', async () => {
+    montarNavegador({ sem: ['MediaStreamTrackProcessor'] });
+    const stream = telaSimples({ width: 1280, height: 720, displaySurface: 'window' });
+    const { b, ws, encoder } = await noAr({}, stream);
+    const video = document.querySelector('video');
+    Object.defineProperties(video, {
+      readyState: { value: 2 },
+      videoWidth: { value: 1280 },
+      videoHeight: { value: 720 },
+    });
+    video.width = 1280;
+    video.height = 720;
+    let presented = 1;
+    video.getVideoPlaybackQuality = () => ({ totalVideoFrames: presented });
+
+    workers[0].onmessage({ data: { type: 'tick' } });
+    presented = 2;
+    workers[0].onmessage({ data: { type: 'tick' } });
+    expect(encoder.codificados.at(-1).opcoes).toEqual({ keyFrame: false });
+
+    ws.receber({ type: 'need-keyframe' });
+    workers[0].onmessage({ data: { type: 'tick' } });
+
+    expect(encoder.codificados).toHaveLength(3);
+    expect(encoder.codificados.at(-1).opcoes).toEqual({ keyFrame: true });
+    b.stop();
+  });
+
   it('reduz a captura do Firefox quando a própria fonte entrega só 10 fps', async () => {
     vi.useFakeTimers();
     try {

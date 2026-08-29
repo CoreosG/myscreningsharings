@@ -14,6 +14,8 @@ Projeto independente de [DevilNine](https://github.com/DevilNine), criado como e
 - **Cloudflare supervisionado:** reconexão automática, terminal limpo e opção de Named Tunnel para endereço fixo.
 - **Firefox e navegadores Chromium:** caminhos de captura próprios, sem o bloqueio artificial do projeto-base.
 - **Mobile útil:** Android/iOS podem entrar, assistir e transmitir câmera; áreas seguras e perfil leve são aplicados automaticamente.
+- **Retomada móvel automática:** voltar do segundo plano, trocar de rede ou reabrir a tela força configuração e keyframe novos, mesmo quando a imagem transmitida está parada.
+- **Atualização e diagnóstico seguros:** checkout Git limpo avança sem sobrescrever alterações; registros técnicos sanitizados ficam locais e o envio é opt-in.
 - **Salas protegidas:** senha derivada com `scrypt`, tokens com escopo e painel administrativo opcional.
 
 ## Início rápido
@@ -27,6 +29,8 @@ Baixe o ZIP, use **Extrair tudo** e abra a pasta completa. Não execute de dentr
 | macOS Intel ou Apple Silicon | duplo clique em `INICIAR.command` | `./INICIAR.command --diagnostico` |
 
 Na primeira execução, cole o **Client ID** e o **Client Secret** quando o assistente local pedir. O bootstrap baixa o runtime oficial, valida o SHA-256, executa `npm ci`, compila o site e inicia servidor/túnel. Nas próximas vezes ele reutiliza tudo.
+
+Uma cópia clonada do repositório verifica `origin/main` ao iniciar e só aplica avanço direto se estiver limpa. No ZIP não existe histórico Git para atualizar com segurança: baixe e extraia a versão nova, preservando o seu `.env`. O atualizador nunca usa reset, stash nem sobrescrita forçada.
 
 Nada é instalado globalmente e nenhuma variável permanente do sistema é criada. Runtime, cache e configuração ficam em `.runtime`, `.cache`, `.bootstrap` e `.env`. Mantenha a janela aberta; `Ctrl+C` (`Control+C` no Mac) encerra tudo.
 
@@ -85,7 +89,7 @@ O supervisor reinicia `cloudflared` com espera progressiva. Named Tunnel mantém
 - **Activity em branco:** confira o Target atual e reabra a Activity para descartar o bundle antigo.
 - **“O site não compilou”:** o launcher reinstala o lockfile e tenta novamente; se falhar, envie o erro real mostrado na janela.
 - **Áudio ausente:** no Chromium marque áudio no seletor; no Firefox/derivado do PC anfitrião mantenha o navegador aberto e aguarde “Áudio isolado do Firefox ligado”. O código 3 agora identifica automaticamente os derivados conhecidos e explica quando nenhum está aberto.
-- **Outra pessoa fica carregando:** o cliente repete automaticamente a configuração e pede novos keyframes até o primeiro quadro chegar; erros posteriores do decoder também se recuperam. Se persistir, teste o perfil Leve e diagnostique sem VPN.
+- **Outra pessoa fica carregando:** o cliente repete configuração/keyframe até o primeiro quadro, vigia travamentos posteriores e se recupera ao voltar do segundo plano ou trocar de rede. Uma tela estática também responde sem depender de mover o mouse. Se persistir, teste o perfil Leve e diagnostique sem VPN.
 - **Porta 3001 ocupada:** feche outra instância deste projeto; não finalize processos desconhecidos.
 - **macOS bloqueou o `.command`:** clique com o botão direito → **Abrir**. Se o ZIP perdeu a permissão, siga o [guia macOS](docs/macos.md).
 - **Portal cai ao clicar em Redirecionamento:** recarregue sem tradução/extensões ou use janela anônima/outro navegador; veja o [guia do erro `removeChild`](docs/discord-portal.md).
@@ -96,13 +100,14 @@ Arquivos em `Program Files`, raiz do disco ou pasta protegida podem impedir grav
 ## Privacidade, limites e documentação
 
 - O projeto não grava mídia em disco; o relay WebSocket repassa pacotes codificados somente aos espectadores autorizados da sala.
+- O diagnóstico local registra somente eventos técnicos sanitizados em `.logs/`; nada é enviado por padrão. Exporte com `npm run diagnostico:exportar` ou configure conscientemente um endpoint HTTPS próprio.
 - O helper WASAPI exige uma prova em uma porta exclusiva de `127.0.0.1`; um participante remoto não pode acionar nem receber por engano o áudio do navegador do anfitrião.
 - O servidor/túnel precisa ficar ligado no PC, Mac, Linux ou VPS que hospeda a Activity.
 - Quick Tunnel não é hospedagem de produção, e o relay atual não substitui uma SFU para grandes públicos.
 - Navegadores exigem gesto e nova escolha em cada captura. Áudio isolado varia por navegador e sistema.
 - Captura nativa de tela móvel não pode ser entregue com um ZIP web: Android requer MediaProjection/AudioPlaybackCapture e iOS requer APIs e distribuição nativas.
 
-Documentação técnica: [arquitetura e desempenho](docs/como-funciona.md) · [VPS/Docker](docs/vps.md) · [mobile](docs/mobile.md) · [avisos de terceiros](THIRD-PARTY-NOTICES.txt)
+Documentação técnica: [arquitetura e desempenho](docs/como-funciona.md) · [diagnóstico e atualização](docs/diagnostico.md) · [VPS/Docker](docs/vps.md) · [mobile](docs/mobile.md) · [avisos de terceiros](THIRD-PARTY-NOTICES.txt)
 
 ## Desenvolvimento
 

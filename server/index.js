@@ -13,9 +13,15 @@ import { systemSnapshot, startSampling } from './system.js';
 import { buildAdminDashboard } from './admin.js';
 import { createNativeAudioBridge, packNativeAudio } from './native-audio.js';
 import { createNativeAudioAuthorizer, startNativeAudioLocalServer } from './native-audio-auth.js';
+import { createDiagnosticLogger, diagnosticoLigado } from '../scripts/diagnostics.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.join(__dirname, '..', '.env') });
+
+const diagnostico = createDiagnosticLogger({
+  raiz: path.join(__dirname, '..'),
+  habilitado: process.env.NODE_ENV !== 'test' && diagnosticoLigado(process.env.DIAGNOSTICO_LOCAL),
+});
 
 const {
   DISCORD_CLIENT_ID,
@@ -1093,6 +1099,20 @@ function handleViewer(ws, room, auth) {
       return;
     }
 
+    if (msg.type === 'diagnostic' && msg.event === 'viewer-recovery') {
+      const agora = Date.now();
+      if (agora - (ws.__lastDiagnosticAt ?? 0) < 10_000) return;
+      ws.__lastDiagnosticAt = agora;
+      const reason = ['stall', 'resume', 'reconnect'].includes(msg.reason) ? msg.reason : 'unknown';
+      diagnostico.log('viewer.recovery', {
+        reason,
+        mobile: msg.mobile === true,
+        discord: msg.discord === true,
+        fullscreen: msg.fullscreen === true,
+      });
+      return;
+    }
+
     // Encerrar a própria transmissão de dentro da Activity, sem ter que achar
     // a aba de captura. Cada um só encerra a sua.
     // Ligar a outra fonte sem abrir uma segunda aba: quem já está transmitindo
@@ -1225,6 +1245,12 @@ function avisarBuildVelho() {
 
 server.listen(PORT, () => {
   const local = `http://localhost:${PORT}`;
+  diagnostico.log('server.ready', {
+    production: isProd,
+    discordConfigured: Boolean(DISCORD_CLIENT_ID),
+    adminEnabled: Boolean(ADMIN_ID),
+    nativeAudioAvailable: Boolean(nativeAudioLocalUrl),
+  });
 
   console.log('');
   console.log(`  Sala de Tela no ar em  ${local}`);

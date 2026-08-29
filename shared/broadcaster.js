@@ -793,6 +793,7 @@ export function createBroadcaster({
           displaySurface !== 'browser' &&
           frameClock &&
           qualityCounterActive &&
+          !wantKeyframe &&
           presentedFrames === lastPresentedFrames
         ) {
           return;

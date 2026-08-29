@@ -42,6 +42,10 @@ const CONHECIDAS = [
   'NODE_ENV',
   'TUNEL_CONFIG',
   'TERMINAL_LIMPO',
+  'ATUALIZACAO_AUTOMATICA',
+  'DIAGNOSTICO_LOCAL',
+  'DIAGNOSTICO_UPLOAD_URL',
+  'DIAGNOSTICO_UPLOAD_TOKEN',
 ];
 
 /** Saída resumida para o iniciador; desligue no .env para depuração. */
@@ -107,6 +111,15 @@ export function gravarEnv(novos) {
     '',
     '# 1 mostra só endereços e avisos úteis. 0 mostra logs para desenvolvimento.',
     `TERMINAL_LIMPO=${v.TERMINAL_LIMPO ?? '1'}`,
+    '',
+    '# Verifica o origin/main e aplica somente fast-forward em checkout Git limpo.',
+    `ATUALIZACAO_AUTOMATICA=${v.ATUALIZACAO_AUTOMATICA ?? '1'}`,
+    '',
+    '# Diagnóstico técnico sem tela, áudio, nomes ou credenciais.',
+    `DIAGNOSTICO_LOCAL=${v.DIAGNOSTICO_LOCAL ?? '1'}`,
+    '# Envio automático é opt-in: deixe a URL vazia para nunca enviar.',
+    `DIAGNOSTICO_UPLOAD_URL=${v.DIAGNOSTICO_UPLOAD_URL ?? ''}`,
+    `DIAGNOSTICO_UPLOAD_TOKEN=${v.DIAGNOSTICO_UPLOAD_TOKEN ?? ''}`,
     '',
   ];
 

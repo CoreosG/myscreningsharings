@@ -7,10 +7,15 @@ No Developer Portal, em **Activities → Settings**, marque Android e iOS para
 que a Activity apareça nessas plataformas.
 
 A interface atual é responsiva, respeita as áreas seguras do Discord e permite
-assistir transmissões no celular. A câmera também pode transmitir em aparelhos
-que forneçam `getUserMedia` e WebCodecs. O primeiro uso móvel escolhe o perfil
-Leve (720/1080p adaptativo, 30 fps e 1,5 Mb/s) para reduzir aquecimento e perda
-de quadros; uma preferência posterior do usuário é preservada.
+assistir transmissões no celular. Ao ampliar uma transmissão, ela ocupa todo o
+viewport disponível e o SDK pede orientação horizontal no Discord para Android
+e iOS. Em navegadores externos, a aplicação usa fullscreen e bloqueio de
+orientação nativos quando permitidos; se o iframe ou o navegador negar essas
+APIs, o modo imersivo em CSS continua funcionando sem cortar a imagem. A câmera
+também pode transmitir em aparelhos que forneçam `getUserMedia` e WebCodecs. O
+primeiro uso móvel escolhe o perfil Leve (720/1080p adaptativo, 30 fps e 1,5
+Mb/s) para reduzir aquecimento e perda de quadros; uma preferência posterior do
+usuário é preservada.
 
 Quando o aparelho não oferece captura de tela, a Activity explica isso antes de
 abrir a página externa e mantém os controles de assistir/câmera disponíveis. O
@@ -34,7 +39,10 @@ Implementado no cliente web:
 3. perfil Leve inicial no mobile;
 4. detecção por capacidade, sem bloquear futuros navegadores que implementem
    `getDisplayMedia`;
-5. aviso visível e anunciado por leitor de tela quando a captura não existe.
+5. aviso visível e anunciado por leitor de tela quando a captura não existe;
+6. retomada automática ao voltar do segundo plano, receber `pageshow` ou trocar
+   de rede, com watchdog de quadros e novo keyframe mesmo se a tela transmitida
+   estiver completamente parada.
 
 Ainda exige validação manual em aparelhos físicos: OAuth, rotação, teclado
 virtual, retorno do segundo plano, troca Wi-Fi/dados, câmera por 30 minutos e

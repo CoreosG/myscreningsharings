@@ -19,17 +19,50 @@ import { createInterface } from 'node:readline/promises';
 import { stdin, stdout } from 'node:process';
 
 import { lerEnv, gravarEnv, terminalLimpo, cor } from './env.mjs';
+import { createDiagnosticLogger, diagnosticoLigado, enviarDiagnostico } from './diagnostics.mjs';
 import { executarBuildComReparo } from './build-recovery.mjs';
 import { garantirEntryPoint, contarEntryPoint } from './entry-point.mjs';
 import { atrasoReinicio } from './reinicio.mjs';
 import { abrirTunel } from './tunel.mjs';
 import { RAIZ, VITE, acompanhar, derrubar, encerrarFilho, encerrandoAgora } from './processos.mjs';
+import { atualizacaoLigada, atualizarCheckout, mensagemAtualizacao } from './updater.mjs';
 
 const linha = (t = '') => console.log(t);
 const nota = (t) => linha(`${cor.fraco}${t}${cor.fim}`);
 const erro = (t) => linha(`${cor.vermelho}  ${t}${cor.fim}`);
 
 // ---------------------------------------------------------------- configurar
+
+const ambienteInicial = lerEnv();
+const diagnostico = createDiagnosticLogger({
+  raiz: RAIZ,
+  habilitado: diagnosticoLigado(ambienteInicial.DIAGNOSTICO_LOCAL),
+});
+diagnostico.log('startup', {
+  terminalLimpo: terminalLimpo(ambienteInicial),
+  discordConfigured: Boolean(
+    ambienteInicial.DISCORD_CLIENT_ID && ambienteInicial.DISCORD_CLIENT_SECRET,
+  ),
+  uploadEnabled: Boolean(ambienteInicial.DIAGNOSTICO_UPLOAD_URL),
+});
+
+const resultadoAtualizacao = atualizarCheckout({
+  raiz: RAIZ,
+  habilitada: atualizacaoLigada(ambienteInicial.ATUALIZACAO_AUTOMATICA),
+});
+const atualizacaoAplicada = resultadoAtualizacao.status === 'atualizada';
+diagnostico.log('update.check', resultadoAtualizacao);
+const avisoAtualizacao = mensagemAtualizacao(resultadoAtualizacao);
+if (avisoAtualizacao) nota(`  ${avisoAtualizacao}`);
+
+if (ambienteInicial.DIAGNOSTICO_UPLOAD_URL) {
+  const envio = await enviarDiagnostico({
+    arquivo: diagnostico.arquivo,
+    url: ambienteInicial.DIAGNOSTICO_UPLOAD_URL,
+    token: ambienteInicial.DIAGNOSTICO_UPLOAD_TOKEN,
+  });
+  diagnostico.log('diagnostic.upload', { status: envio.status, httpStatus: envio.httpStatus });
+}
 
 const rl = createInterface({ input: stdin, output: stdout });
 
@@ -98,7 +131,7 @@ async function configurar(atual) {
 linha();
 linha(`${cor.forte}  Sala de Tela${cor.fim}`);
 
-const atual = lerEnv();
+const atual = ambienteInicial;
 const configurado = Boolean(atual.DISCORD_CLIENT_ID && atual.DISCORD_CLIENT_SECRET);
 const saidaLimpa = terminalLimpo(atual);
 
@@ -180,8 +213,8 @@ const npmCli = [
   path.join(path.dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js'),
 ].find((candidato) => candidato && fs.existsSync(candidato));
 
-const repararDependencias = () => {
-  nota('  O primeiro build falhou. Reparando as dependências automaticamente…');
+const instalarDependencias = (mensagem) => {
+  nota(mensagem);
   if (!npmCli) {
     return {
       status: 1,
@@ -200,9 +233,32 @@ const repararDependencias = () => {
   });
 };
 
+const repararDependencias = () =>
+  instalarDependencias('  O primeiro build falhou. Reparando as dependências automaticamente…');
+
+if (atualizacaoAplicada) {
+  const dependenciasAtualizadas = instalarDependencias(
+    '  Sincronizando as dependências da versão nova…',
+  );
+  if (dependenciasAtualizadas.status !== 0) {
+    diagnostico.log('update.dependencies-failed', {
+      detail: String(dependenciasAtualizadas.stderr || dependenciasAtualizadas.stdout).slice(
+        -2_000,
+      ),
+    });
+    erro('A versão nova foi baixada, mas não foi possível sincronizar suas dependências.');
+    nota('  Feche a janela e abra o iniciador novamente; seus arquivos não foram apagados.');
+    process.exit(1);
+  }
+}
+
 const build = executarBuildComReparo({ build: executarBuild, reparar: repararDependencias });
 
 if (!build.ok) {
+  diagnostico.log('build.failed', {
+    repaired: build.reparado,
+    detail: build.detalhes.slice(-2_000),
+  });
   const detalhes = build.detalhes.slice(-6000) || 'O processo terminou sem informar a causa.';
   linha(
     `\n${cor.vermelho}  Não foi possível montar o site nem após o reparo automático.${cor.fim}`,
@@ -235,6 +291,7 @@ function criarServidor(origem) {
   if (origem) env.PUBLIC_ORIGIN = origem;
 
   origemServidor = origem;
+  diagnostico.log('server.spawn', { publicOriginChanged: Boolean(origem) });
   const processo = spawn(process.execPath, ['server/index.js'], { cwd: RAIZ, stdio: 'pipe', env });
   servidor = processo;
   acompanhar('servidor', cor.azul, processo, {
@@ -274,6 +331,7 @@ let timerTunel = null;
 function agendarTunel(motivo) {
   if (encerrandoAgora() || timerTunel) return;
   const espera = atrasoReinicio(tentativasTunel++);
+  diagnostico.log('tunnel.retry', { attempt: tentativasTunel, delayMs: espera, reason: motivo });
   linha(`${cor.amarelo}  ${motivo} Nova tentativa em ${Math.ceil(espera / 1000)}s.${cor.fim}`);
   timerTunel = setTimeout(() => {
     timerTunel = null;

@@ -86,4 +86,16 @@ describe('player', () => {
 
     expect(onTamanho).toHaveBeenCalledTimes(2);
   });
+
+  it('avisa a saúde do stream a cada quadro realmente desenhado', () => {
+    const onFrame = vi.fn();
+    const player = createPlayer(document.createElement('canvas'), { onFrame });
+    const frame = () => ({ displayWidth: 1280, displayHeight: 720, close: vi.fn() });
+
+    player.start(config);
+    decoders.at(-1).init.output(frame());
+    decoders.at(-1).init.output(frame());
+
+    expect(onFrame).toHaveBeenCalledTimes(2);
+  });
 });

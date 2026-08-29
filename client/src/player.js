@@ -15,7 +15,7 @@
  * imagem durante o redimensionamento.
  */
 
-export function createPlayer(canvas, { onError, onTamanho, onResync } = {}) {
+export function createPlayer(canvas, { onError, onTamanho, onResync, onFrame } = {}) {
   const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
 
   let decoder = null;
@@ -115,6 +115,7 @@ export function createPlayer(canvas, { onError, onTamanho, onResync } = {}) {
     // VideoFrame segura memória de GPU; sem close() a aba trava em segundos.
     frame.close();
     framesDrawn++;
+    onFrame?.();
 
     // Avisa no primeiro quadro e sempre que a resolução muda: quem desenha o
     // palco precisa das duas coisas — tirar o "conectando" e refazer a forma.
