@@ -14,6 +14,13 @@ Description=Sala de Tela — compartilhamento de tela para o Discord
 After=network-online.target
 Wants=network-online.target
 
+# Reiniciar não pode virar um laço infinito consumindo a máquina: cinco
+# tentativas em um minuto e ele desiste, deixando o erro visível no status em
+# vez de escondido num log que ninguém lê.
+StartLimitBurst=5
+StartLimitIntervalSec=60
+
+
 [Service]
 Type=simple
 User=sala
@@ -31,12 +38,6 @@ Environment=NODE_ENV=production
 
 Restart=always
 RestartSec=3
-
-# Reiniciar não pode virar um laço infinito consumindo a máquina: cinco
-# tentativas em um minuto e ele desiste, deixando o erro visível no status em
-# vez de escondido num log que ninguém lê.
-StartLimitBurst=5
-StartLimitIntervalSec=60
 
 # Endurecimento básico. Nada exótico — só fecha o que um relay de vídeo não
 # tem motivo nenhum para tocar.

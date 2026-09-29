@@ -30,6 +30,8 @@ const {
   DISCORD_ADMIN_ID = '',
   PUBLIC_ORIGIN: ORIGEM_CRUA = 'http://localhost:3001',
   PORT = 3001,
+  // The reverse proxy terminates TLS; production binds the app to loopback.
+  HOST = '0.0.0.0',
   NODE_ENV = 'development',
 } = process.env;
 
@@ -1243,7 +1245,7 @@ function avisarBuildVelho() {
   }
 }
 
-server.listen(PORT, () => {
+server.listen(PORT, HOST, () => {
   const local = `http://localhost:${PORT}`;
   diagnostico.log('server.ready', {
     production: isProd,
