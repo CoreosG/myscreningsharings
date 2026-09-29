@@ -1,5 +1,12 @@
 # Sala de Tela
 
+> **Sobre este fork.** Esta é a cópia que roda no nosso servidor, publicada para
+> qualquer um conferir o que ela faz. O código é o do
+> [DevilNine/discord-screenshare](https://github.com/DevilNine/discord-screenshare);
+> as únicas mudanças nossas são os commits acima do `143ac69` — veja em
+> [Compare](https://github.com/CoreosG/myscreningsharings/compare/143ac69...main).
+> Nenhuma credencial, token ou `.env` está neste repositório.
+
 Compartilhe tela, janela, guia, câmera e áudio em uma Activity do Discord com inicialização portátil no Windows, Linux e macOS.
 
 Projeto independente de [DevilNine](https://github.com/DevilNine), criado como evolução e inspirado no [Sala de Tela original, de Jc007zZ](https://github.com/Jc007zZ/discord-screen).
