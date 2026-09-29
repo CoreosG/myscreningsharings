@@ -789,11 +789,20 @@ export function watch(room, ws, slot) {
   if (ws.__watching.has(slot)) {
     const agora = Date.now();
     const ultimo = ws.__lastKeyframeRequest.get(slot) ?? 0;
+
+    // O som sai antes do relógio. O limite existe para poupar o transmissor de
+    // uma enxurrada de keyframes, e um keyframe é caro; a config de áudio é um
+    // JSON de duas linhas que o espectador descarta quando já está tocando
+    // aquele formato. Segurar as duas juntas era o que deixava quem voltava de
+    // uma remontagem da Activity com imagem e sem som: o primeiro pedido
+    // recuperava o vídeo, e o pedido que traria o áudio de volta caía dentro
+    // da janela de 1,5 s e morria aqui.
+    if (entry.audioConfig) sendJson(ws, { type: 'audio-config', slot, config: entry.audioConfig });
+
     if (agora - ultimo < 1_500) return;
     ws.__lastKeyframeRequest.set(slot, agora);
     ws.__primed.delete(slot);
     if (entry.config) sendJson(ws, { type: 'config', slot, config: entry.config });
-    if (entry.audioConfig) sendJson(ws, { type: 'audio-config', slot, config: entry.audioConfig });
     requestKeyframe(entry);
     return;
   }

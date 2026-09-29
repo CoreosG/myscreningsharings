@@ -24,6 +24,22 @@ const COLCHAO = 0.08;
 // a tela e continuar empilhando só piora — melhor um corte e voltar ao vivo.
 const ATRASO_MAXIMO = COLCHAO * 4;
 
+/**
+ * Duas configs de áudio descrevem a mesma transmissão.
+ *
+ * O relay reenvia a config a cada pedido de recuperação, e recriar o
+ * AudioContext por causa de um reenvio corta o som por alguns milissegundos
+ * sem nenhum motivo — a transmissão não mudou de formato.
+ */
+export function mesmaConfigAudio(a, b) {
+  if (!a || !b) return false;
+  return (
+    a.codec === b.codec &&
+    a.sampleRate === b.sampleRate &&
+    a.numberOfChannels === b.numberOfChannels
+  );
+}
+
 export function createAudio({ onError, volume = 1 } = {}) {
   let ctx = null;
   let decoder = null;
@@ -31,12 +47,16 @@ export function createAudio({ onError, volume = 1 } = {}) {
   let proximo = 0;
   let nivel = volume;
   let tocou = false;
+  let config = null;
+  let bloqueado = false;
 
-  function start(config) {
+  function start(configuracao) {
     stop();
+    config = configuracao;
 
     if (!window.AudioDecoder || !window.AudioContext) {
       onError?.('Este navegador não toca o áudio da transmissão.');
+      config = null;
       return false;
     }
 
@@ -63,12 +83,41 @@ export function createAudio({ onError, volume = 1 } = {}) {
     } catch {
       onError?.(`Áudio em formato não suportado: ${config.codec}`);
       decoder = null;
+      config = null;
       return false;
     }
 
     proximo = 0;
     tocou = false;
+    bloqueado = false;
     return true;
+  }
+
+  /**
+   * Tira o contexto do estado suspenso.
+   *
+   * Um AudioContext nascido sem gesto do usuário — e é o que acontece quando a
+   * Activity é remontada pelo Discord e o som volta sozinho — começa suspenso.
+   * O navegador rejeita o resume em silêncio, e o resultado é a tela andando
+   * com o som parado sem nada na interface dizendo por quê. Guardamos o estado
+   * para o painel poder falar, e o primeiro clique de quem assiste tenta de
+   * novo: aí existe gesto, e aí o navegador libera.
+   */
+  function retomar() {
+    if (!ctx || ctx.state !== 'suspended') return Promise.resolve(false);
+
+    return ctx
+      .resume()
+      .then(() => {
+        bloqueado = false;
+        return true;
+      })
+      .catch(() => {
+        // Uma vez só: repetir o aviso a cada pacote viraria enxurrada.
+        if (!bloqueado) onError?.('O navegador segurou o som. Clique na tela para liberar.');
+        bloqueado = true;
+        return false;
+      });
   }
 
   /** Pacote empacotado: [1B slot][1B tipo][8B timestamp][8B envio][payload] */
@@ -117,7 +166,7 @@ export function createAudio({ onError, volume = 1 } = {}) {
 
     // O navegador pode ter criado o contexto suspenso; assistir foi um clique,
     // então retomar aqui é legítimo e não esbarra na política de autoplay.
-    if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+    retomar();
   }
 
   /**
@@ -146,7 +195,20 @@ export function createAudio({ onError, volume = 1 } = {}) {
     ganho = null;
     proximo = 0;
     tocou = false;
+    config = null;
+    bloqueado = false;
   }
 
-  return { start, push, stop, setVolume, temSom: () => tocou };
+  return {
+    start,
+    push,
+    stop,
+    setVolume,
+    retomar,
+    temSom: () => tocou,
+    // Tocando de verdade, e não só agendado: o painel precisa distinguir som
+    // que sai da caixa de som que o navegador está segurando.
+    estaBloqueado: () => Boolean(bloqueado || ctx?.state === 'suspended'),
+    mesmaConfig: (outra) => mesmaConfigAudio(config, outra),
+  };
 }

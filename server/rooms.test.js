@@ -444,6 +444,21 @@ describe('watch e unwatch', () => {
     expect(ws.tipos()).toContain('need-keyframe');
   });
 
+  it('reenvia o áudio mesmo com o keyframe dentro do limite', () => {
+    const { room, viewer, entry } = comTransmissao();
+    R.setConfig(room, entry, { codec: 'avc1' });
+    R.setAudioConfig(room, entry, { codec: 'opus' });
+    viewer.limpar();
+    // O pedido anterior acabou de sair: o keyframe espera, o som não.
+    viewer.__lastKeyframeRequest.set(entry.slot, Date.now());
+    entry.ws.limpar();
+
+    R.watch(room, viewer, entry.slot);
+
+    expect(viewer.tipos()).toEqual(['audio-config']);
+    expect(entry.ws.tipos()).not.toContain('need-keyframe');
+  });
+
   it('repete config e keyframe quando o primeiro quadro se perdeu', () => {
     const { room, viewer, entry } = comTransmissao();
     R.setConfig(room, entry, { codec: 'avc1' });

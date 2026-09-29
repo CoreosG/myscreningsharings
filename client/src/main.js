@@ -262,9 +262,20 @@ function pedirRecuperacao(slot, { imediata = false, motivo = 'stall' } = {}) {
 
 function recuperarTelasVisiveis() {
   if (document.visibilityState === 'hidden') return;
+  retomarAudio();
   for (const slot of recoverableSlots(watching, available)) {
     pedirRecuperacao(slot, { imediata: true, motivo: 'resume' });
   }
+}
+
+/**
+ * Destrava o som que o navegador suspendeu.
+ *
+ * Voltar da aba escondida e o primeiro clique de quem assiste são os dois
+ * momentos em que existe gesto — e é gesto o que a política de autoplay pede.
+ */
+function retomarAudio() {
+  for (const s of streams.values()) s.audio?.retomar();
 }
 
 function unwatchSlot(slot) {
@@ -997,6 +1008,18 @@ function renderBar() {
 
 /** Prepara o lugar do transmissor; o decoder só nasce quando o config chega. */
 function openStream(slot, userId) {
+  // O som atravessa a remontagem da imagem.
+  //
+  // Toda recuperação reenvia a config de vídeo, e cada reenvio passava por
+  // aqui derrubando junto o decoder de áudio e o AudioContext — que nada
+  // tinham a ver com o keyframe perdido. A imagem voltava, o som não, e o
+  // controle de volume sumia da barra até alguém mexer no layout de novo.
+  // Quando é o mesmo transmissor, o áudio continua de pé; se ele mudou, o
+  // closeStream abaixo leva tudo, porque aí é outra transmissão.
+  const anterior = streams.get(slot);
+  const audioPreservado = anterior?.userId === userId ? anterior.audio : null;
+  if (anterior) anterior.audio = null;
+
   closeStream(slot);
 
   const canvas = document.createElement('canvas');
@@ -1031,7 +1054,7 @@ function openStream(slot, userId) {
       },
     }),
     // Só nasce quando a transmissão anuncia que tem som — nem toda tem.
-    audio: null,
+    audio: audioPreservado,
   };
 
   streams.set(slot, s);
@@ -1058,6 +1081,15 @@ function openStream(slot, userId) {
 function startAudio(slot, config) {
   const s = streams.get(slot);
   if (!s) return;
+
+  // Reenvio do mesmo formato: o relay repete a config a cada recuperação, e
+  // recriar o AudioContext por isso abriria um buraco audível no som que já
+  // estava tocando certo. Só tenta destravar, caso o navegador o tenha
+  // suspendido enquanto a Activity esteve escondida.
+  if (s.audio?.mesmaConfig(config)) {
+    s.audio.retomar();
+    return;
+  }
 
   s.audio?.stop();
   s.audio = createAudio({ onError: (m) => toast(m, true), volume: volumeEfetivo(s.userId) });
@@ -1138,6 +1170,7 @@ function ensureStatsTimer() {
 
     // Quatro estados diferentes que, sem isto, parecem todos "sem som".
     if (!s.audio) $('pSom').textContent = 'a transmissão não tem áudio';
+    else if (s.audio.estaBloqueado()) $('pSom').textContent = 'o navegador segurou o som';
     else if (!s.audio.temSom()) $('pSom').textContent = 'aguardando o áudio…';
     else if (volume === 0) $('pSom').textContent = 'silenciado aqui';
     else $('pSom').textContent = `tocando · ${Math.round(volume * 100)}%`;
@@ -2410,6 +2443,8 @@ function recolherBarras() {
 // nenhum, e sem isto as barras sumiriam para sempre no primeiro silêncio.
 window.addEventListener('mousemove', acordarBarras);
 window.addEventListener('pointerdown', acordarBarras);
+// O mesmo clique que acorda as barras serve de gesto para o áudio suspenso.
+window.addEventListener('pointerdown', retomarAudio);
 // No document, e não na window: o mouseleave da window não dispara ao sair pela
 // borda em todos os navegadores.
 document.addEventListener('mouseleave', recolherBarras);
