@@ -416,7 +416,7 @@ describe('opcoesTela', () => {
       surfaceSwitching: 'exclude',
       windowAudio: 'window',
       systemAudio: 'include',
-      audioSelection: 'include',
+      audioSelection: 'preferred',
     });
   });
 });

@@ -134,7 +134,8 @@ export function opcoesTela({ fps = 30, comSom = false, video } = {}) {
     // continua explícita no seletor do navegador; quem não marcar a caixa
     // recebe somente vídeo.
     opts.systemAudio = 'include';
-    opts.audioSelection = 'include';
+    // Chromium accepts 'preferred' for this enum; 'include' rejects getDisplayMedia.
+    opts.audioSelection = 'preferred';
   }
   return opts;
 }
