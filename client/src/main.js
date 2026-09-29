@@ -102,13 +102,13 @@ let chegada = null;
 // ------------------------------------------------------------------- helpers
 
 let toastTimer = null;
-function toast(msg, isError = false) {
+function toast(msg, isError = false, duracao = 6000) {
   const el = $('toast');
   el.textContent = msg;
   el.classList.toggle('error', isError);
   el.hidden = false;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => (el.hidden = true), 6000);
+  toastTimer = setTimeout(() => (el.hidden = true), duracao);
 }
 
 /**
@@ -224,10 +224,30 @@ function entradasDoGrid() {
   return saida;
 }
 
+/**
+ * O aviso da tela preta.
+ *
+ * Sem aceleração de hardware, o Discord entrega ao iframe um canvas que decodifica
+ * mas não pinta: o áudio toca, a contagem de quadros sobe e quem assiste vê
+ * preto — sintoma que não se distingue de uma transmissão travada. O aviso
+ * aparece no momento em que a pessoa entra na tela, que é quando ela está
+ * olhando, e sai sozinho em cinco segundos; na aba do navegador o problema não
+ * existe, e lá a segunda metade da frase seria um convite a lugar nenhum.
+ */
+function avisarTelaPreta(fonte) {
+  if (!inDiscord || fonte === 'camera') return;
+  toast(
+    'Se a tela está preta, ative a aceleração de hardware do Discord, ou abra no navegador.',
+    false,
+    5_000,
+  );
+}
+
 function watchSlot(slot) {
   const info = available.get(slot);
   if (!info) return;
   watching.add(slot);
+  avisarTelaPreta(info.fonte);
   ws?.send(JSON.stringify({ type: 'watch', slot }));
   // O config pode já ter chegado; se não, ele chega logo e dispara o start.
   if (info.config) {

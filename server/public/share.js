@@ -169,7 +169,7 @@ function atenderPedido(fonte, novas) {
   if (!painel || painel.ativo() || painel.indisponivel()) return;
 
   chamar(fonte);
-  if (fonte === 'camera') painel.verCamera();
+  if (fonte === 'camera') painel.verCamera().finally(() => painel.escolher());
 }
 
 // --------------------------------------------------------------- controle
@@ -304,12 +304,17 @@ function criarPainel(fonte) {
       setStatus('Prévia — ainda não está no ar.');
       await listarCameras();
     } catch (err) {
-      setStatus(
-        err.name === 'NotAllowedError'
-          ? 'Acesso à câmera negado. Libere a permissão na barra de endereço e tente de novo.'
-          : err.message,
-        'error',
-      );
+      const mensagens = {
+        NotAllowedError:
+          'Acesso à câmera negado. Libere a permissão na barra de endereço e tente de novo.',
+        NotReadableError:
+          'O dispositivo está ocupado. Feche o OBS ou outro programa que esteja usando essa fonte e tente de novo.',
+        NotFoundError:
+          'Nenhuma câmera ou placa de captura encontrada. Reconecte o dispositivo e tente de novo.',
+        OverconstrainedError:
+          'O dispositivo recusou essa configuração. Escolha outra fonte ou reconecte a placa.',
+      };
+      setStatus(mensagens[err.name] ?? err.message, 'error');
     }
   }
 
@@ -383,7 +388,7 @@ function criarPainel(fonte) {
     await listarCameras();
 
     if (!el('menu').childElementCount) {
-      setStatus('Nenhuma câmera encontrada neste computador.', 'error');
+      setStatus('Nenhuma câmera ou placa de captura encontrada neste computador.', 'error');
       return;
     }
 

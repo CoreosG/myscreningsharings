@@ -55,6 +55,8 @@ O Client Secret fica somente no servidor local e o `.gitignore` exclui `.env`. N
 
 Clique em **Compartilhar tela**. Quando o iframe do Discord não puder capturar, o projeto abre uma página externa; mantenha-a aberta durante a transmissão.
 
+Placas de captura HDMI/USB aparecem como dispositivos de vídeo, junto das câmeras. Use **Ligar câmera**, conceda a permissão de câmera e escolha o dispositivo pelo nome na seta ao lado do botão antes de transmitir. Se a placa estiver ocupada pelo OBS ou por outro aplicativo, feche esse aplicativo e tente novamente.
+
 | Plataforma | Assistir | Tela/câmera | Áudio de tela |
 | --- | ---: | ---: | --- |
 | Chrome, Edge, Brave, Opera desktop | Sim | Sim | guia/janela/sistema quando o navegador oferecer |
